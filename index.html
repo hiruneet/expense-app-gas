@@ -1,4 +1,4 @@
-<!-- ver3 single-page unified input + history -->
+<!-- ver4 single-page unified input + history / API_URL+timeout fixed -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -379,10 +379,11 @@
 
   <script>
     // ============================================================
-    // index.html - 入力ビュー + 履歴ビュー統合版
+    // index.html - 入力ビュー + 履歴ビュー統合版（API_URL/timeout修正版）
     // ============================================================
 
-    const API_URL = window.location.origin + window.location.pathname;
+    // login.html と同じ Apps Script URL を API 呼び出し先に使う
+    const API_URL = '<?= ScriptApp.getService().getUrl(); ?>';
 
     let currentUser = null;
     let currentImageDataUrl = null;
@@ -392,27 +393,41 @@
     let editPrevCat = 'CAT001';
 
     function buildLoginUrl() {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('page');
-      url.searchParams.delete('view');
-      url.hash = '';
-      return url.toString();
+      return API_URL;
     }
 
-    async function callAPI(params) {
+    async function callAPI(params, timeoutMs = 15000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(params),
-          redirect: 'follow'
+          redirect: 'follow',
+          signal: controller.signal
         });
 
         const text = await res.text();
-        return JSON.parse(text);
+
+        if (!text) {
+          throw new Error('APIレスポンスが空です');
+        }
+
+        try {
+          return JSON.parse(text);
+        } catch (parseErr) {
+          console.error('API parse error:', text);
+          throw new Error('APIレスポンスの解析に失敗しました');
+        }
       } catch (err) {
-        console.error('callAPI error:', err);
+        if (err.name === 'AbortError') {
+          throw new Error('通信がタイムアウトしました');
+        }
         throw err;
+      } finally {
+        clearTimeout(timer);
       }
     }
 
@@ -515,6 +530,7 @@
         console.error('カテゴリ取得エラー:', err);
         categories = [];
         buildInputCategorySelect();
+        showAlert('カテゴリ情報の取得に失敗しました', 'warning');
       }
     }
 
@@ -557,6 +573,7 @@
 
       try {
         showLoading('セッション確認中...');
+
         const result = await callAPI({
           action: 'validateSession',
           token
@@ -567,30 +584,25 @@
           location.href = buildLoginUrl();
           return;
         }
+
+        currentUser = { token, userId, userName, groupId, groupName };
+        sessionStorage.setItem('appUrl', API_URL);
+
+        document.getElementById('headerUser').textContent =
+          `${groupName || ''} / ${userName || ''} さん`;
+
+        setToday();
+        buildMonthSelect('monthSelect');
+        buildMonthSelect('reportMonth');
+        await loadCategories();
+        await showView('input');
+
       } catch (err) {
-        console.error('validateSession failed:', err);
+        console.error('init error:', err);
+        showAlert('初期化に失敗しました: ' + (err.message || err), 'error');
       } finally {
         hideLoading();
       }
-
-      currentUser = { token, userId, userName, groupId, groupName };
-      sessionStorage.setItem('appUrl', API_URL);
-
-      document.getElementById('headerUser').textContent =
-        `${groupName || ''} / ${userName || ''} さん`;
-
-      setToday();
-      buildMonthSelect('monthSelect');
-      buildMonthSelect('reportMonth');
-      await loadCategories();
-
-      const url = new URL(window.location.href);
-      const initialView =
-        (url.searchParams.get('view') === 'history' || url.hash === '#history')
-          ? 'history'
-          : 'input';
-
-      await showView(initialView);
     }
 
     // ===== 入力ビュー処理 =====
@@ -664,7 +676,7 @@
           action: 'processOCR',
           token: currentUser.token,
           imageBase64: base64
-        });
+        }, 30000);
 
         if (result.success && result.data) {
           const d = result.data;
@@ -684,7 +696,7 @@
       } catch (err) {
         console.error('OCRエラー:', err);
         status.textContent = '❌ OCRエラーが発生しました';
-        showAlert('OCR処理でエラーが発生しました', 'error');
+        showAlert('OCR処理でエラーが発生しました: ' + (err.message || err), 'error');
       } finally {
         hideLoading();
         btn.disabled = false;
@@ -746,7 +758,7 @@
             groupId: currentUser.groupId,
             imageBase64: base64,
             fileName: `receipt_${Date.now()}.jpg`
-          });
+          }, 30000);
 
           if (imgResult.success) {
             imageFileId = imgResult.fileId || '';
@@ -769,7 +781,7 @@
           comment: document.getElementById('comment').value,
           imageFileId,
           imageUrl
-        });
+        }, 30000);
 
         if (saveResult.success) {
           showAlert('✅ 登録しました！', 'success');
@@ -779,7 +791,7 @@
         }
       } catch (err) {
         console.error('保存エラー:', err);
-        showAlert('保存処理でエラーが発生しました', 'error');
+        showAlert('保存処理でエラーが発生しました: ' + (err.message || err), 'error');
       } finally {
         hideLoading();
         btn.disabled = false;
@@ -817,6 +829,8 @@
     // ===== 履歴ビュー処理 =====
 
     async function loadRecords() {
+      if (!currentUser?.token) return;
+
       const yearMonth = document.getElementById('monthSelect').value;
       showLoading('データ読み込み中...');
 
@@ -825,7 +839,7 @@
           action: 'getRecords',
           token: currentUser.token,
           yearMonth
-        });
+        }, 20000);
 
         if (data.success) {
           allRecords = Array.isArray(data.records) ? data.records : [];
@@ -839,7 +853,7 @@
         console.error('loadRecords error:', e);
         allRecords = [];
         renderRecords([]);
-        showAlert('通信エラーが発生しました', 'error');
+        showAlert('履歴取得エラー: ' + (e.message || e), 'error');
       } finally {
         hideLoading();
       }
@@ -995,7 +1009,7 @@
             isAdvancePayment: document.getElementById('editIsAdvance').checked,
             comment: document.getElementById('editComment').value
           }
-        });
+        }, 20000);
 
         if (data.success) {
           closeEditModal();
@@ -1006,7 +1020,7 @@
         }
       } catch (e) {
         console.error('updateRecord error:', e);
-        alert('通信エラーが発生しました');
+        alert('通信エラーが発生しました: ' + (e.message || e));
       } finally {
         hideLoading();
       }
@@ -1022,7 +1036,7 @@
           action: 'deleteRecord',
           token: currentUser.token,
           recordId
-        });
+        }, 20000);
 
         if (data.success) {
           showAlert('🗑️ 削除しました', 'info');
@@ -1032,7 +1046,7 @@
         }
       } catch (e) {
         console.error('deleteRecord error:', e);
-        showAlert('通信エラーが発生しました', 'error');
+        showAlert('通信エラーが発生しました: ' + (e.message || e), 'error');
       } finally {
         hideLoading();
       }
@@ -1081,7 +1095,7 @@
           token: currentUser.token,
           yearMonth,
           reportType
-        });
+        }, 60000);
 
         if (data.success) {
           const links = document.getElementById('reportLinks');
@@ -1120,7 +1134,7 @@
         }
       } catch (e) {
         console.error('generateReport error:', e);
-        alert('通信エラーが発生しました');
+        alert('通信エラーが発生しました: ' + (e.message || e));
         document.getElementById('generateBtn').disabled = false;
       } finally {
         hideLoading();
@@ -1134,7 +1148,7 @@
         await callAPI({
           action: 'logout',
           token: currentUser?.token || sessionStorage.getItem('token')
-        });
+        }, 10000);
       } catch (e) {
         console.warn('logout API failed:', e);
       }
