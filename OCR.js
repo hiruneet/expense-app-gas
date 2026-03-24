@@ -235,4 +235,4 @@ function extractPayee(text) {
   } catch (err) {
     Logger.log('❌ 例外エラー: ' + err.message);
   }
-}
+
