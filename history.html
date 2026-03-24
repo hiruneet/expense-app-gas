@@ -1,3 +1,4 @@
+//ver1
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -135,8 +136,10 @@
         </select>
       </div>
 
+      <!-- レポート件数・金額プレビュー -->
       <div id="reportPreview" class="alert alert-info hidden"></div>
 
+      <!-- 生成結果リンク -->
       <div id="reportResult" class="hidden">
         <div class="divider"></div>
         <div class="alert alert-success">✅ レポートが生成されました</div>
@@ -160,19 +163,18 @@
     // history.html - クライアントサイドJS（修正版）
     // ============================================================
 
-    const PAGE_BASE_URL = window.location.origin + window.location.pathname;
-    const APP_URL       = PAGE_BASE_URL;
-    const TOKEN         = sessionStorage.getItem('token');
-    const GROUP_NAME    = sessionStorage.getItem('groupName');
-    const DISPLAY_NAME  = sessionStorage.getItem('displayName');
-    const ROLE          = sessionStorage.getItem('role');
+    const APP_URL      = window.location.origin + window.location.pathname;
+    const TOKEN        = sessionStorage.getItem('token');
+    const GROUP_NAME   = sessionStorage.getItem('groupName');
+    const DISPLAY_NAME = sessionStorage.getItem('displayName');
+    const ROLE         = sessionStorage.getItem('role');
 
-    let allRecords  = [];
-    let categories  = [];
-    let editPrevCat = 'CAT001';
+    let allRecords   = [];
+    let categories   = [];
+    let editPrevCat  = 'CAT001';
 
     function buildPageUrl(page) {
-      const url = new URL(window.location.href);
+      const url = new URL(APP_URL);
       url.searchParams.set('page', page);
       return url.toString();
     }
@@ -201,9 +203,7 @@
       el.className = `alert alert-${type}`;
       el.textContent = msg;
       el.classList.remove('hidden');
-      if (type === 'success' || type === 'info') {
-        setTimeout(() => el.classList.add('hidden'), 4000);
-      }
+      setTimeout(() => el.classList.add('hidden'), 5000);
     }
 
     function setLoading(show, text = '処理中...') {
@@ -232,16 +232,20 @@
           return;
         }
 
-        // 現在の正しいURLを保持
-        sessionStorage.setItem('appUrl', PAGE_BASE_URL);
+        // 現在の /exec URL を保存
+        sessionStorage.setItem('appUrl', APP_URL);
 
         document.getElementById('headerUser').textContent =
           `${GROUP_NAME || ''} / ${DISPLAY_NAME || ''}`;
 
+        // 月選択プルダウン（直近12ヶ月）
         buildMonthSelect('monthSelect');
         buildMonthSelect('reportMonth');
 
+        // 費目マスター取得
         await loadCategories();
+
+        // 初期レコード表示
         await loadRecords();
 
       } catch (e) {
@@ -252,20 +256,15 @@
       }
     })();
 
-    /** 月選択プルダウン生成 */
+    /** 月選択プルダウン生成（直近12ヶ月） */
     function buildMonthSelect(elemId) {
       const sel = document.getElementById(elemId);
       sel.innerHTML = '';
       const now = new Date();
-
       for (let i = 0; i < 12; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-
-        const val = `${y}${m}`;
-        const label = `${y}年${Number(m)}月`;
-
+        const val = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
+        const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
         const opt = document.createElement('option');
         opt.value = val;
         opt.textContent = label;
@@ -276,10 +275,7 @@
     /** 費目マスター読み込み */
     async function loadCategories() {
       try {
-        const data = await callAPI({
-          action: 'getCategories'
-        });
-
+        const data = await callAPI({ action: 'getCategories' });
         if (data.success && Array.isArray(data.categories)) {
           categories = data.categories.map(c => ({
             categoryId: c.categoryId || c.code || '',
@@ -291,7 +287,6 @@
       } catch (e) {
         console.error('loadCategories error:', e);
         categories = [];
-        showAlert('費目マスターの取得に失敗しました', 'error');
       }
     }
 
@@ -299,7 +294,6 @@
     function buildCategorySelect(elemId, selectedId) {
       const sel = document.getElementById(elemId);
       sel.innerHTML = '';
-
       categories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.categoryId;
@@ -325,15 +319,15 @@
           allRecords = Array.isArray(data.records) ? data.records : [];
           renderRecords(allRecords);
         } else {
+          showAlert(data.error || 'データ取得に失敗しました', 'error');
           allRecords = [];
           renderRecords([]);
-          showAlert(data.error || 'データ取得に失敗しました', 'error');
         }
       } catch (e) {
         console.error('loadRecords error:', e);
+        showAlert('通信エラーが発生しました', 'error');
         allRecords = [];
         renderRecords([]);
-        showAlert('通信エラーが発生しました', 'error');
       } finally {
         setLoading(false);
       }
@@ -344,7 +338,7 @@
       const list = document.getElementById('recordList');
       const bar  = document.getElementById('summaryBar');
 
-      if (!records || records.length === 0) {
+      if (records.length === 0) {
         bar.classList.add('hidden');
         list.innerHTML = `
           <div class="empty-state">
@@ -354,19 +348,21 @@
         return;
       }
 
+      // 合計計算
       const total = records.reduce((s, r) => s + (Number(r.amount) || 0), 0);
       document.getElementById('totalAmount').textContent = '¥' + total.toLocaleString();
       document.getElementById('recordCount').textContent = records.length + '件';
       bar.classList.remove('hidden');
 
+      // カード生成
       list.innerHTML = records.map((rec, idx) => `
         <div class="record-card ${rec.isAdvancePayment ? 'advance' : ''}">
           <div class="record-top">
             <div class="record-payee">
-              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx + 1}</span>
+              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx+1}</span>
               ${esc(rec.payee || '（支払先不明）')}
             </div>
-            <div class="record-amount">¥${Number(rec.amount || 0).toLocaleString()}</div>
+            <div class="record-amount">¥${Number(rec.amount||0).toLocaleString()}</div>
           </div>
           <div class="record-meta">
             <span>📅 ${esc(rec.date || '')}</span>
@@ -398,11 +394,11 @@
     /** HTML エスケープ */
     function esc(str) {
       return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
     }
 
     // ===== 画像を開く =====
@@ -445,7 +441,6 @@
     function toggleEditAdvance() {
       const cb  = document.getElementById('editIsAdvance');
       const sel = document.getElementById('editCategory');
-
       if (cb.checked) {
         editPrevCat = sel.value || 'CAT001';
         buildCategorySelect('editCategory', 'CAT011');
@@ -460,8 +455,8 @@
 
     /** レコード更新 */
     async function updateRecord() {
-      const recordId  = document.getElementById('editRecordId').value;
-      const sel       = document.getElementById('editCategory');
+      const recordId = document.getElementById('editRecordId').value;
+      const sel      = document.getElementById('editCategory');
       const invoiceNo = document.getElementById('editInvoiceNo').value;
 
       if (invoiceNo && !/^T\d{13}$/.test(invoiceNo)) {
@@ -470,7 +465,6 @@
       }
 
       setLoading(true, '更新中...');
-
       try {
         const data = await callAPI({
           action: 'updateRecord',
@@ -478,7 +472,7 @@
           recordId,
           updates: {
             date:             document.getElementById('editDate').value,
-            amount:           parseInt(document.getElementById('editAmount').value, 10) || 0,
+            amount:           parseInt(document.getElementById('editAmount').value) || 0,
             payee:            document.getElementById('editPayee').value,
             invoiceNo:        invoiceNo,
             categoryId:       sel.value,
@@ -509,14 +503,12 @@
       if (!confirm(`「${payee}」を削除しますか？\nこの操作は元に戻せません。`)) return;
 
       setLoading(true, '削除中...');
-
       try {
         const data = await callAPI({
           action: 'deleteRecord',
           token: TOKEN,
           recordId
         });
-
         if (data.success) {
           showAlert('🗑️ 削除しました', 'info');
           await loadRecords();
@@ -533,23 +525,22 @@
 
     // ===== レポートモーダル =====
     function showReportModal() {
+      // 現在の月を選択
       const curMonth = document.getElementById('monthSelect').value;
       document.getElementById('reportMonth').value = curMonth;
 
+      // プレビュー（件数・合計）
       const preview = document.getElementById('reportPreview');
       if (allRecords.length > 0) {
         const total = allRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-        const monthLabel = document.getElementById('monthSelect').options[
-          document.getElementById('monthSelect').selectedIndex
-        ]?.textContent || '';
-
         preview.textContent =
-          `${monthLabel}：${allRecords.length}件 / 合計 ¥${total.toLocaleString()}`;
+          `${document.getElementById('monthSelect').options[document.getElementById('monthSelect').selectedIndex].textContent}：${allRecords.length}件 / 合計 ¥${total.toLocaleString()}`;
         preview.classList.remove('hidden');
       } else {
         preview.classList.add('hidden');
       }
 
+      // 結果エリアリセット
       document.getElementById('reportResult').classList.add('hidden');
       document.getElementById('reportLinks').innerHTML = '';
       document.getElementById('generateBtn').disabled = false;
@@ -566,8 +557,8 @@
 
     /** レポート生成 */
     async function generateReport() {
-      const yearMonth  = document.getElementById('reportMonth').value;
-      const reportType = document.getElementById('reportType').value;
+      const yearMonth   = document.getElementById('reportMonth').value;
+      const reportType  = document.getElementById('reportType').value;
 
       document.getElementById('generateBtn').disabled = true;
       setLoading(true, 'レポート生成中...\n（50件で約1分かかります）');
@@ -591,7 +582,6 @@
                 📊 経費一覧スプレッドシートを開く
               </a>`;
           }
-
           if (data.pdfUrl) {
             links.innerHTML += `
               <a href="${data.pdfUrl}" target="_blank"
@@ -628,7 +618,6 @@
       } catch (e) {
         console.warn('logout API failed:', e);
       }
-
       sessionStorage.clear();
       location.href = buildPageUrl('login');
     }

@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+//ver1
+DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -133,11 +134,10 @@
 
 <script>
 // ===== 設定 =====
-const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
-const PAGE_BASE_URL = window.location.origin + window.location.pathname;
+const APP_URL = window.location.origin + window.location.pathname;
 
 function buildPageUrl(page) {
-  const url = new URL(window.location.href);
+  const url = new URL(APP_URL);
   url.searchParams.set('page', page);
   return url.toString();
 }
@@ -161,7 +161,7 @@ async function callAPI(params) {
 
 // ===== セッション情報 =====
 let currentUser = null;
-let currentImageDataUrl = null;
+let currentImageDataUrl = null; // 選択中の画像データ
 
 // ===== ローディング制御 =====
 function showLoading(text = '処理中...') {
@@ -175,10 +175,10 @@ function hideLoading() {
 // ===== メッセージ表示 =====
 function showAlert(msg, type = 'info') {
   const el = document.getElementById('alertMsg');
+  el.className = `alert alert-${type}`;
   el.textContent = msg;
-  el.className = type;
   el.classList.remove('hidden');
-  if (type === 'success') {
+  if (type === 'success' || type === 'info') {
     setTimeout(() => el.classList.add('hidden'), 3000);
   }
 }
@@ -199,6 +199,7 @@ async function init() {
     return;
   }
 
+  // セッション検証
   try {
     showLoading('セッション確認中...');
     const result = await callAPI({ action: 'validateSession', token });
@@ -209,24 +210,30 @@ async function init() {
     }
   } catch (err) {
     console.error('validateSession failed:', err);
+    // オフライン等の場合は継続
   } finally {
     hideLoading();
   }
 
   currentUser = { token, userId, userName, groupId, groupName };
 
-  // 現在の正しいURLを保持
-  sessionStorage.setItem('appUrl', PAGE_BASE_URL);
+  // 現在の /exec URL を保存
+  sessionStorage.setItem('appUrl', APP_URL);
 
+  // ヘッダーにユーザー情報表示
   document.getElementById('headerUser').textContent = groupName + ' / ' + userName + ' さん';
 
+  // 今日の日付をセット
   const today = new Date();
   const yyyy  = today.getFullYear();
   const mm    = String(today.getMonth() + 1).padStart(2, '0');
   const dd    = String(today.getDate()).padStart(2, '0');
   document.getElementById('expenseDate').value = `${yyyy}-${mm}-${dd}`;
 
+  // カテゴリ読み込み
   await loadCategories();
+
+  // 登録ボタンはまだ無効のまま（画像選択後に有効化）
 }
 
 // ===== カテゴリ読み込み =====
@@ -248,7 +255,7 @@ async function loadCategories() {
   }
 }
 
-// ===== 画像選択処理 =====
+// ===== 画像選択処理（カメラ・ギャラリー共通） =====
 function handleImageSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -257,19 +264,23 @@ function handleImageSelect(event) {
   reader.onload = function(ev) {
     currentImageDataUrl = ev.target.result;
 
+    // プレビュー表示
     const img = document.getElementById('previewImg');
     img.src = currentImageDataUrl;
     img.classList.remove('hidden');
     document.getElementById('previewPlaceholder').classList.add('hidden');
 
+    // OCRボタン有効化
     document.getElementById('ocrBtn').disabled = false;
+
+    // 登録ボタン有効化
     document.getElementById('saveBtn').disabled = false;
     document.getElementById('saveHint').classList.add('hidden');
   };
   reader.readAsDataURL(file);
 }
 
-// ===== 画像圧縮 =====
+// ===== 画像圧縮（Canvas） =====
 function compressImage(dataUrl, maxPx = 1024, quality = 0.85) {
   return new Promise(resolve => {
     const img = new Image();
@@ -277,11 +288,10 @@ function compressImage(dataUrl, maxPx = 1024, quality = 0.85) {
       let w = img.width, h = img.height;
       if (w > maxPx || h > maxPx) {
         if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
-        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+        else        { w = Math.round(w * maxPx / h); h = maxPx; }
       }
       const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
+      canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
@@ -365,6 +375,7 @@ async function saveRecord() {
   const payee    = document.getElementById('payee').value;
   const category = document.getElementById('categorySelect').value;
 
+  // バリデーション
   if (!date || !amount) {
     showAlert('日付と金額は必須です', 'error');
     return;
@@ -378,6 +389,7 @@ async function saveRecord() {
     let imageFileId = '';
     let imageUrl    = '';
 
+    // 画像アップロード
     if (currentImageDataUrl) {
       showLoading('画像をアップロード中...');
       const compressed = await compressImage(currentImageDataUrl);
@@ -397,6 +409,7 @@ async function saveRecord() {
       }
     }
 
+    // レコード保存
     showLoading('登録中...');
     const saveResult = await callAPI({
       action: 'saveRecord',
@@ -434,30 +447,35 @@ async function saveRecord() {
 function resetForm() {
   currentImageDataUrl = null;
 
+  // 画像プレビューリセット
   document.getElementById('previewImg').classList.add('hidden');
   document.getElementById('previewImg').src = '';
   document.getElementById('previewPlaceholder').classList.remove('hidden');
   document.getElementById('cameraInput').value  = '';
   document.getElementById('galleryInput').value = '';
 
+  // OCRボタン無効化
   document.getElementById('ocrBtn').disabled = true;
   document.getElementById('ocrStatus').classList.add('hidden');
   document.getElementById('ocrStatus').textContent = '';
 
-  document.getElementById('amount').value = '';
-  document.getElementById('payee').value = '';
-  document.getElementById('invoiceNo').value = '';
-  document.getElementById('categorySelect').value = '';
+  // フォームクリア
+  document.getElementById('amount').value          = '';
+  document.getElementById('payee').value           = '';
+  document.getElementById('invoiceNo').value       = '';
+  document.getElementById('categorySelect').value  = '';
   document.getElementById('categorySelect').disabled = false;
   document.getElementById('isAdvancePayment').checked = false;
-  document.getElementById('comment').value = '';
+  document.getElementById('comment').value         = '';
 
+  // 日付は今日に戻す
   const today = new Date();
   const yyyy  = today.getFullYear();
   const mm    = String(today.getMonth() + 1).padStart(2, '0');
   const dd    = String(today.getDate()).padStart(2, '0');
   document.getElementById('expenseDate').value = `${yyyy}-${mm}-${dd}`;
 
+  // 登録ボタン無効化
   document.getElementById('saveBtn').disabled = true;
   document.getElementById('saveHint').classList.remove('hidden');
 }
@@ -480,6 +498,7 @@ async function doLogout() {
 
 // ===== 起動 =====
 window.addEventListener('load', init);
+
 </script>
 
 </body>
