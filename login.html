@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経費精算 - ログイン</title>
+  <?!= include('stylesheet'); ?>
+  <style>
+    body { background: linear-gradient(160deg, #1a73e8 0%, #1557b0 40%, #0d47a1 100%); }
+    .login-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-logo .logo-icon { font-size: 52px; }
+    .login-logo h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-top: 8px;
+    }
+    .login-logo p {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin-top: 4px;
+    }
+    .version-badge {
+      text-align: center;
+      margin-top: 20px;
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ローディング -->
+  <div id="loading" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <div class="loading-text">認証中...</div>
+  </div>
+
+  <div class="login-wrapper">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">🧾</div>
+        <h2>経費精算アプリ</h2>
+        <p>領収書をスマホで簡単精算</p>
+      </div>
+
+      <!-- エラーメッセージ -->
+      <div id="errorMsg" class="alert alert-error hidden"></div>
+
+      <form id="loginForm">
+        <!-- グループ選択 -->
+        <div class="form-group">
+          <label class="form-label">🏢 グループ</label>
+          <select id="groupSelect" class="form-control" required>
+            <option value="">読み込み中...</option>
+          </select>
+        </div>
+
+        <!-- ユーザー選択 -->
+        <div class="form-group">
+          <label class="form-label">👤 ユーザー</label>
+          <select id="userSelect" class="form-control" required disabled>
+            <option value="">グループを選択してください</option>
+          </select>
+        </div>
+
+        <!-- パスワード -->
+        <div class="form-group">
+          <label class="form-label">🔒 パスワード</label>
+          <input type="password" id="passwordInput" class="form-control"
+                 placeholder="パスワードを入力" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" id="loginBtn" class="btn btn-primary" style="margin-top:8px;">
+          <span class="btn-icon">🔑</span> ログイン
+        </button>
+      </form>
+    </div>
+    <div class="version-badge">経費精算アプリ v1.0</div>
+  </div>
+
+  <script>
+   // ============================================================
+// login.html - クライアントサイドJS（修正版）
+// ============================================================
+
+const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
+
+/** GAS API 呼び出し共通関数 */
+async function callAPI(params) {
+  const res = await fetch(APP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(params),
+    redirect: 'follow'
+  });
+  return await res.json();
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function hideError() {
+  document.getElementById('errorMsg').classList.add('hidden');
+}
+
+// ===== 初期化：グループ一覧取得 =====
+async function initGroups() {
+  try {
+    const data = await callAPI({ action: 'getGroups' });
+    const sel = document.getElementById('groupSelect');
+    sel.innerHTML = '<option value="">グループを選択...</option>';
+    if (data.success && data.groups.length > 0) {
+      data.groups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.groupId;
+        opt.textContent = g.groupName;
+        sel.appendChild(opt);
+      });
+    } else {
+      sel.innerHTML = '<option value="">グループが登録されていません</option>';
+    }
+  } catch (e) {
+    document.getElementById('groupSelect').innerHTML = '<option value="">取得エラー</option>';
+    showError('グループ情報の取得に失敗しました');
+  }
+}
+
+// ===== グループ変更：ユーザー一覧取得 =====
+document.getElementById('groupSelect').addEventListener('change', async function() {
+  const groupId = this.value;
+  const userSel = document.getElementById('userSelect');
+  hideError();
+
+  if (!groupId) {
+    userSel.innerHTML = '<option value="">グループを選択してください</option>';
+    userSel.disabled = true;
+    return;
+  }
+
+  userSel.disabled = true;
+  userSel.innerHTML = '<option value="">読み込み中...</option>';
+
+  try {
+    const data = await callAPI({ action: 'getUsers', groupId });
+    userSel.innerHTML = '<option value="">ユーザーを選択...</option>';
+    if (data.success && data.users.length > 0) {
+      data.users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.userId;
+        opt.textContent = u.displayName;
+        userSel.appendChild(opt);  // ← 修正：sel → userSel
+      });
+      userSel.disabled = false;
+    } else {
+      userSel.innerHTML = '<option value="">ユーザーなし</option>';
+    }
+  } catch (e) {
+    userSel.innerHTML = '<option value="">取得エラー</option>';
+    showError('ユーザー情報の取得に失敗しました');
+  }
+});
+
+// ===== ログイン処理 =====
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  hideError();
+
+  const groupId  = document.getElementById('groupSelect').value;
+  const userId   = document.getElementById('userSelect').value;
+  const password = document.getElementById('passwordInput').value;
+
+  if (!groupId || !userId || !password) {
+    showError('すべての項目を入力してください');
+    return;
+  }
+
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('loginBtn').disabled = true;
+
+  try {
+    const data = await callAPI({ action: 'login', groupId, userId, password });
+    if (data.success) {
+      // セッション情報を sessionStorage に保存
+      sessionStorage.setItem('token',       data.token);
+      sessionStorage.setItem('groupId',     data.groupId);
+      sessionStorage.setItem('groupName',   data.groupName);
+      sessionStorage.setItem('userId',      data.userId);
+      sessionStorage.setItem('displayName', data.displayName);
+      sessionStorage.setItem('role',        data.role);
+      sessionStorage.setItem('appUrl',      APP_URL);
+      // 入力画面へ遷移
+      location.href = APP_URL + '?page=index';
+    } else {
+      showError(data.error || 'ログインに失敗しました');
+    }
+  } catch (e) {
+    showError('通信エラーが発生しました。再度お試しください。');
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('loginBtn').disabled = false;
+  }
+});
+
+// ===== 既にログイン済みなら入力画面へ =====
+(async function checkExistingSession() {
+  const token = sessionStorage.getItem('token');
+  if (!token) {
+    initGroups();
+    return;
+  }
+  try {
+    const appUrl = sessionStorage.getItem('appUrl') || APP_URL;
+    const res = await fetch(appUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'validateSession', token }),
+      redirect: 'follow'
+    });
+    const data = await res.json();
+    if (data.success) {
+      location.href = APP_URL + '?page=index';
+      return;
+    }
+  } catch (e) {}
+  sessionStorage.clear();
+  initGroups();
+})();
+
+  </script>
+</body>
+</html>

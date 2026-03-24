@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経費精算 - 入力</title>
+  <?!= include('stylesheet'); ?>
+</head>
+<body>
+  <!-- ローディング -->
+  <div id="loading" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <div id="loadingText" class="loading-text">処理中...</div>
+  </div>
+
+  <div class="app-container">
+    <!-- ヘッダー -->
+    <header class="app-header">
+      <div>
+        <h1>🧾 経費入力</h1>
+        <div class="header-sub" id="headerUser">読み込み中...</div>
+      </div>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;border:none;"
+              onclick="doLogout()">ログアウト</button>
+    </header>
+
+    <main class="app-main">
+      <!-- メッセージ -->
+      <div id="alertMsg" class="hidden"></div>
+
+      <!-- 撮影エリア -->
+      <div class="card">
+        <div class="card-title">📷 領収書を撮影</div>
+        <div class="preview-area" id="previewArea" onclick="document.getElementById('cameraInput').click()">
+          <div class="preview-placeholder" id="previewPlaceholder">
+            <div class="ph-icon">📷</div>
+            <p>タップして撮影 / 画像を選択</p>
+          </div>
+          <img id="previewImg" class="hidden" alt="領収書プレビュー">
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment"
+               style="display:none" onchange="handleImageSelect(event)">
+        <div class="flex" style="gap:8px;margin-top:10px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('cameraInput').click()">
+            📷 カメラ
+          </button>
+          <button class="btn btn-secondary" style="flex:1;"
+                  onclick="document.getElementById('galleryInput').click()">
+            🖼️ ギャラリー
+          </button>
+        </div>
+        <input type="file" id="galleryInput" accept="image/*"
+               style="display:none" onchange="handleImageSelect(event)">
+
+        <!-- OCR 実行ボタン -->
+        <button id="ocrBtn" class="btn btn-primary mt-8" disabled onclick="runOCR()">
+          <span class="btn-icon">🔍</span> OCRで自動読取
+        </button>
+        <div id="ocrStatus" class="text-sub text-center mt-8 hidden"></div>
+      </div>
+
+      <!-- 入力フォーム -->
+      <div class="card">
+        <div class="card-title">📝 経費情報</div>
+
+        <!-- 立替金チェック -->
+        <div class="check-group" id="advancePayGroup" style="margin-bottom:14px;"
+             onclick="toggleAdvance()">
+          <input type="checkbox" id="isAdvancePayment" onclick="event.stopPropagation(); toggleAdvance()">
+          <label for="isAdvancePayment">💰 立替金として処理する</label>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">📅 日付 <span class="text-danger">*</span></label>
+          <input type="date" id="expenseDate" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">💴 金額（円） <span class="text-danger">*</span></label>
+          <input type="number" id="amount" class="form-control" placeholder="例：1500"
+                 min="0" inputmode="numeric">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">🏪 支払先</label>
+          <input type="text" id="payee" class="form-control" placeholder="例：〇〇パーキング">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">🔢 インボイス番号</label>
+          <input type="text" id="invoiceNo" class="form-control" placeholder="例：T1234567890123（なければ空白）"
+                 maxlength="14" pattern="^T\d{13}$|^$">
+          <div id="invoiceError" class="text-danger hidden" style="font-size:12px;margin-top:4px;">
+            形式が正しくありません（T + 13桁の数字）
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">📂 費目</label>
+          <select id="categorySelect" class="form-control">
+            <option value="">読み込み中...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">💬 コメント</label>
+          <textarea id="comment" class="form-control" placeholder="メモや補足を入力（任意）"
+                    rows="2"></textarea>
+        </div>
+
+        <button id="saveBtn" class="btn btn-primary" disabled onclick="saveRecord()">
+          <span class="btn-icon">💾</span> 登録する
+        </button>
+        <div class="text-sub text-center mt-8" id="saveHint">
+          ※ 画像を選択すると登録できます
+        </div>
+      </div>
+    </main>
+
+    <!-- ボトムナビ -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active">
+        <span class="nav-icon">➕</span>新規入力
+      </button>
+      <button class="nav-btn" onclick="goHistory()">
+        <span class="nav-icon">📋</span>履歴
+      </button>
+      <button class="nav-btn" onclick="doLogout()">
+        <span class="nav-icon">🚪</span>ログアウト
+      </button>
+    </nav>
+  </div>
+
+<script>
+// ===== 設定 =====
+const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
+
+// ===== API共通（text/plain でCORS回避） =====
+async function callAPI(params) {
+  try {
+    const res = await fetch(APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(params),
+      redirect: 'follow'
+    });
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch (err) {
+    console.error('callAPI error:', err);
+    throw err;
+  }
+}
+
+// ===== セッション情報 =====
+let currentUser = null;
+let currentImageDataUrl = null; // 選択中の画像データ
+
+// ===== ローディング制御 =====
+function showLoading(text = '処理中...') {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loading').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loading').classList.add('hidden');
+}
+
+// ===== メッセージ表示 =====
+function showAlert(msg, type = 'info') {
+  const el = document.getElementById('alertMsg');
+  el.textContent = msg;
+  el.className = type;  // stylesheet.html のクラスに合わせて調整
+  el.classList.remove('hidden');
+  if (type === 'success') {
+    setTimeout(() => el.classList.add('hidden'), 3000);
+  }
+}
+function hideAlert() {
+  document.getElementById('alertMsg').classList.add('hidden');
+}
+
+// ===== 初期化 =====
+async function init() {
+  const token     = sessionStorage.getItem('token');
+  const userId    = sessionStorage.getItem('userId');
+  const userName  = sessionStorage.getItem('displayName');
+  const groupId   = sessionStorage.getItem('groupId');
+  const groupName = sessionStorage.getItem('groupName');
+
+  if (!token) {
+    location.href = APP_URL + '?page=login';
+    return;
+  }
+
+  // セッション検証
+  try {
+    showLoading('セッション確認中...');
+    const result = await callAPI({ action: 'validateSession', token });
+    if (!result.success) {
+      sessionStorage.clear();
+      location.href = APP_URL + '?page=login';
+      return;
+    }
+  } catch (err) {
+    console.error('validateSession failed:', err);
+    // オフライン等の場合は継続
+  } finally {
+    hideLoading();
+  }
+
+  currentUser = { token, userId, userName, groupId, groupName };
+
+  // ヘッダーにユーザー情報表示
+  document.getElementById('headerUser').textContent = groupName + ' / ' + userName + ' さん';
+
+  // 今日の日付をセット
+  const today = new Date();
+  const yyyy  = today.getFullYear();
+  const mm    = String(today.getMonth() + 1).padStart(2, '0');
+  const dd    = String(today.getDate()).padStart(2, '0');
+  document.getElementById('expenseDate').value = `${yyyy}-${mm}-${dd}`;
+
+  // カテゴリ読み込み
+  await loadCategories();
+
+  // 登録ボタンはまだ無効のまま（画像選択後に有効化）
+}
+
+// ===== カテゴリ読み込み =====
+async function loadCategories() {
+  try {
+    const result = await callAPI({ action: 'getCategories' });
+    const sel = document.getElementById('categorySelect');
+    sel.innerHTML = '<option value="">-- 費目を選択 --</option>';
+    if (result.success && result.categories) {
+      result.categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.code;
+        opt.textContent = cat.name;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.error('カテゴリ取得エラー:', err);
+  }
+}
+
+// ===== 画像選択処理（カメラ・ギャラリー共通） =====
+function handleImageSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    currentImageDataUrl = ev.target.result;
+
+    // プレビュー表示
+    const img = document.getElementById('previewImg');
+    img.src = currentImageDataUrl;
+    img.classList.remove('hidden');
+    document.getElementById('previewPlaceholder').classList.add('hidden');
+
+    // OCRボタン有効化
+    document.getElementById('ocrBtn').disabled = false;
+
+    // 登録ボタン有効化
+    document.getElementById('saveBtn').disabled = false;
+    document.getElementById('saveHint').classList.add('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+
+// ===== 画像圧縮（Canvas） =====
+function compressImage(dataUrl, maxPx = 1024, quality = 0.85) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = function() {
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else        { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ===== OCR実行 =====
+async function runOCR() {
+  if (!currentImageDataUrl) return;
+
+  const btn = document.getElementById('ocrBtn');
+  const status = document.getElementById('ocrStatus');
+  btn.disabled = true;
+  status.textContent = '🔍 OCR処理中...';
+  status.classList.remove('hidden');
+
+  try {
+    showLoading('OCR処理中...');
+    const compressed = await compressImage(currentImageDataUrl);
+    const base64 = compressed.split(',')[1];
+
+    const result = await callAPI({
+      action: 'processOCR',
+      token: currentUser.token,
+      imageBase64: base64
+    });
+
+    if (result.success && result.data) {
+      const d = result.data;
+      if (d.date)      document.getElementById('expenseDate').value    = d.date;
+      if (d.amount)    document.getElementById('amount').value         = d.amount;
+      if (d.payee)     document.getElementById('payee').value          = d.payee;
+      if (d.invoiceNo) document.getElementById('invoiceNo').value      = d.invoiceNo;
+      if (d.category)  document.getElementById('categorySelect').value = d.category;
+      status.textContent = '✅ OCR完了！内容を確認してください';
+      showAlert('OCR完了！内容を確認してください', 'success');
+    } else {
+      status.textContent = '⚠️ 読取できませんでした。手動で入力してください';
+      showAlert('OCR結果を取得できませんでした。手動で入力してください。', 'warning');
+    }
+  } catch (err) {
+    console.error('OCRエラー:', err);
+    status.textContent = '❌ OCRエラーが発生しました';
+    showAlert('OCR処理でエラーが発生しました', 'error');
+  } finally {
+    hideLoading();
+    btn.disabled = false;
+  }
+}
+
+// ===== 立替金トグル =====
+function toggleAdvance() {
+  const cb  = document.getElementById('isAdvancePayment');
+  const sel = document.getElementById('categorySelect');
+  if (cb.checked) {
+    sel.value    = 'CAT011';
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+  }
+}
+
+// ===== インボイス番号バリデーション =====
+document.getElementById('invoiceNo').addEventListener('input', function() {
+  const val = this.value;
+  const errEl = document.getElementById('invoiceError');
+  if (val && !/^T\d{13}$/.test(val)) {
+    errEl.classList.remove('hidden');
+  } else {
+    errEl.classList.add('hidden');
+  }
+});
+
+// ===== 登録処理 =====
+async function saveRecord() {
+  hideAlert();
+
+  const date     = document.getElementById('expenseDate').value;
+  const amount   = document.getElementById('amount').value;
+  const payee    = document.getElementById('payee').value;
+  const category = document.getElementById('categorySelect').value;
+
+  // バリデーション
+  if (!date || !amount) {
+    showAlert('日付と金額は必須です', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-icon">⏳</span> 保存中...';
+
+  try {
+    let imageFileId = '';
+    let imageUrl    = '';
+
+    // 画像アップロード
+    if (currentImageDataUrl) {
+      showLoading('画像をアップロード中...');
+      const compressed = await compressImage(currentImageDataUrl);
+      const base64 = compressed.split(',')[1];
+
+      const imgResult = await callAPI({
+        action: 'saveImage',
+        token: currentUser.token,
+        groupId: currentUser.groupId,
+        imageBase64: base64,
+        fileName: `receipt_${Date.now()}.jpg`
+      });
+
+      if (imgResult.success) {
+        imageFileId = imgResult.fileId  || '';
+        imageUrl    = imgResult.fileUrl || '';
+      }
+    }
+
+    // レコード保存
+    showLoading('登録中...');
+    const saveResult = await callAPI({
+      action: 'saveRecord',
+      token: currentUser.token,
+      groupId: currentUser.groupId,
+      userId: currentUser.userId,
+      date,
+      amount: parseInt(amount, 10),
+      payee,
+      invoiceNo:      document.getElementById('invoiceNo').value,
+      categoryCode:   category,
+      advancePayment: document.getElementById('isAdvancePayment').checked,
+      comment:        document.getElementById('comment').value,
+      imageFileId,
+      imageUrl
+    });
+
+    if (saveResult.success) {
+      showAlert('✅ 登録しました！', 'success');
+      resetForm();
+    } else {
+      showAlert('保存エラー: ' + (saveResult.error || '不明なエラー'), 'error');
+    }
+  } catch (err) {
+    console.error('保存エラー:', err);
+    showAlert('保存処理でエラーが発生しました', 'error');
+  } finally {
+    hideLoading();
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-icon">💾</span> 登録する';
+  }
+}
+
+// ===== フォームリセット =====
+function resetForm() {
+  currentImageDataUrl = null;
+
+  // 画像プレビューリセット
+  document.getElementById('previewImg').classList.add('hidden');
+  document.getElementById('previewImg').src = '';
+  document.getElementById('previewPlaceholder').classList.remove('hidden');
+  document.getElementById('cameraInput').value  = '';
+  document.getElementById('galleryInput').value = '';
+
+  // OCRボタン無効化
+  document.getElementById('ocrBtn').disabled = true;
+  document.getElementById('ocrStatus').classList.add('hidden');
+  document.getElementById('ocrStatus').textContent = '';
+
+  // フォームクリア
+  document.getElementById('amount').value          = '';
+  document.getElementById('payee').value           = '';
+  document.getElementById('invoiceNo').value       = '';
+  document.getElementById('categorySelect').value  = '';
+  document.getElementById('categorySelect').disabled = false;
+  document.getElementById('isAdvancePayment').checked = false;
+  document.getElementById('comment').value         = '';
+
+  // 日付は今日に戻す
+  const today = new Date();
+  const yyyy  = today.getFullYear();
+  const mm    = String(today.getMonth() + 1).padStart(2, '0');
+  const dd    = String(today.getDate()).padStart(2, '0');
+  document.getElementById('expenseDate').value = `${yyyy}-${mm}-${dd}`;
+
+  // 登録ボタン無効化
+  document.getElementById('saveBtn').disabled = true;
+  document.getElementById('saveHint').classList.remove('hidden');
+}
+
+// ===== 履歴画面へ =====
+function goHistory() {
+  location.href = APP_URL + '?page=history';
+}
+
+// ===== ログアウト =====
+async function doLogout() {
+  try {
+    await callAPI({ action: 'logout', token: currentUser?.token });
+  } catch (e) { /* 無視 */ }
+  sessionStorage.clear();
+  location.href = APP_URL + '?page=login';
+}
+
+// ===== 起動 =====
+window.addEventListener('load', init);
+
+</script>
+
+</body>
+</html>

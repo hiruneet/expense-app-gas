@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>経費精算 - 履歴</title>
+  <?!= include('stylesheet'); ?>
+</head>
+<body>
+  <!-- ローディング -->
+  <div id="loading" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <div id="loadingText" class="loading-text">読み込み中...</div>
+  </div>
+
+  <div class="app-container">
+    <!-- ヘッダー -->
+    <header class="app-header">
+      <div>
+        <h1>📋 経費履歴</h1>
+        <div class="header-sub" id="headerUser"></div>
+      </div>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;border:none;"
+              onclick="doLogout()">ログアウト</button>
+    </header>
+
+    <main class="app-main">
+      <!-- 月選択 + レポートボタン -->
+      <div class="flex-between" style="margin-bottom:12px;gap:8px;">
+        <select id="monthSelect" class="form-control" style="flex:1;"
+                onchange="loadRecords()"></select>
+        <button class="btn btn-outline btn-sm" onclick="showReportModal()">
+          📊 レポート
+        </button>
+      </div>
+
+      <!-- 合計バー -->
+      <div class="summary-bar hidden" id="summaryBar">
+        <div>
+          <div class="sum-label">合計金額</div>
+          <div class="sum-value" id="totalAmount">¥0</div>
+        </div>
+        <div class="sum-count" id="recordCount">0件</div>
+      </div>
+
+      <!-- メッセージ -->
+      <div id="alertMsg" class="hidden"></div>
+
+      <!-- レコード一覧 -->
+      <div id="recordList"></div>
+    </main>
+
+    <!-- ボトムナビ -->
+    <nav class="bottom-nav">
+      <button class="nav-btn" onclick="goInput()">
+        <span class="nav-icon">➕</span>新規入力
+      </button>
+      <button class="nav-btn active">
+        <span class="nav-icon">📋</span>履歴
+      </button>
+      <button class="nav-btn" onclick="doLogout()">
+        <span class="nav-icon">🚪</span>ログアウト
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== 編集モーダル ===== -->
+  <div id="editModal" class="modal-overlay hidden" onclick="closeEditModal(event)">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+      <div class="modal-handle"></div>
+      <div class="modal-title">✏️ 経費を編集</div>
+
+      <input type="hidden" id="editRecordId">
+
+      <div class="check-group" id="editAdvanceGroup" style="margin-bottom:14px;"
+           onclick="toggleEditAdvance()">
+        <input type="checkbox" id="editIsAdvance" onclick="event.stopPropagation(); toggleEditAdvance()">
+        <label>💰 立替金として処理する</label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">📅 日付</label>
+        <input type="date" id="editDate" class="form-control">
+      </div>
+      <div class="form-group">
+        <label class="form-label">💴 金額（円）</label>
+        <input type="number" id="editAmount" class="form-control" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">🏪 支払先</label>
+        <input type="text" id="editPayee" class="form-control">
+      </div>
+      <div class="form-group">
+        <label class="form-label">🔢 インボイス番号</label>
+        <input type="text" id="editInvoiceNo" class="form-control"
+               placeholder="T1234567890123 または空白" maxlength="14">
+      </div>
+      <div class="form-group">
+        <label class="form-label">📂 費目</label>
+        <select id="editCategory" class="form-control"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">💬 コメント</label>
+        <textarea id="editComment" class="form-control" rows="2"></textarea>
+      </div>
+
+      <div class="flex" style="gap:8px;margin-top:8px;">
+        <button class="btn btn-secondary" style="flex:1;" onclick="closeEditModal()">
+          キャンセル
+        </button>
+        <button class="btn btn-primary" style="flex:1;" onclick="updateRecord()">
+          💾 保存する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== レポートモーダル ===== -->
+  <div id="reportModal" class="modal-overlay hidden" onclick="closeReportModal(event)">
+    <div class="modal-sheet" onclick="event.stopPropagation()">
+      <div class="modal-handle"></div>
+      <div class="modal-title">📊 月次レポート出力</div>
+
+      <div class="form-group">
+        <label class="form-label">📅 対象月</label>
+        <select id="reportMonth" class="form-control"></select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">📄 出力種別</label>
+        <select id="reportType" class="form-control">
+          <option value="both">両方（経費一覧 + 画像PDF）</option>
+          <option value="list">経費一覧スプレッドシートのみ</option>
+          <option value="pdf">領収書画像PDFのみ</option>
+        </select>
+      </div>
+
+      <!-- レポート件数・金額プレビュー -->
+      <div id="reportPreview" class="alert alert-info hidden"></div>
+
+      <!-- 生成結果リンク -->
+      <div id="reportResult" class="hidden">
+        <div class="divider"></div>
+        <div class="alert alert-success">✅ レポートが生成されました</div>
+        <div id="reportLinks" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <div class="flex" style="gap:8px;margin-top:16px;">
+        <button class="btn btn-secondary" style="flex:1;" onclick="closeReportModal()">
+          閉じる
+        </button>
+        <button id="generateBtn" class="btn btn-primary" style="flex:1;"
+                onclick="generateReport()">
+          📊 生成する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // history.html - クライアントサイドJS
+    // ============================================================
+
+    const APP_URL      = sessionStorage.getItem('appUrl') || '<?= ScriptApp.getService().getUrl(); ?>';
+    const TOKEN        = sessionStorage.getItem('token');
+    const GROUP_NAME   = sessionStorage.getItem('groupName');
+    const DISPLAY_NAME = sessionStorage.getItem('displayName');
+    const ROLE         = sessionStorage.getItem('role');
+
+    let allRecords   = [];
+    let categories   = [];
+    let editPrevCat  = 'CAT001';
+
+    /** GAS API 呼び出し */
+    async function callAPI(params) {
+      const res = await fetch(APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },  // ← 変更
+        body: JSON.stringify(params),
+        redirect: 'follow'
+      });
+      return await res.json();
+    }
+
+    function showAlert(msg, type = 'info') {
+      const el = document.getElementById('alertMsg');
+      el.className = `alert alert-${type}`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+    function setLoading(show, text = '処理中...') {
+      document.getElementById('loadingText').textContent = text;
+      document.getElementById('loading').classList.toggle('hidden', !show);
+    }
+
+    // ===== 初期化 =====
+    (async function init() {
+      if (!TOKEN) { location.href = APP_URL + '?page=login'; return; }
+
+      document.getElementById('headerUser').textContent =
+        `${GROUP_NAME} / ${DISPLAY_NAME}`;
+
+      // 月選択プルダウン（直近12ヶ月）
+      buildMonthSelect('monthSelect');
+      buildMonthSelect('reportMonth');
+
+      // 費目マスター取得
+      await loadCategories();
+
+      // 初期レコード表示
+      await loadRecords();
+    })();
+
+    /** 月選択プルダウン生成（直近12ヶ月） */
+    function buildMonthSelect(elemId) {
+      const sel = document.getElementById(elemId);
+      sel.innerHTML = '';
+      const now = new Date();
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const val = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
+        const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+    }
+
+    /** 費目マスター読み込み */
+    async function loadCategories() {
+      try {
+        const data = await callAPI({ action: 'getCategories' });
+        if (data.success) categories = data.categories;
+      } catch (e) {}
+    }
+
+    /** 費目セレクト構築 */
+    function buildCategorySelect(elemId, selectedId) {
+      const sel = document.getElementById(elemId);
+      sel.innerHTML = '';
+      categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.categoryId;
+        opt.textContent = c.categoryName;
+        if (c.categoryId === selectedId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    // ===== レコード一覧読み込み =====
+    async function loadRecords() {
+      const yearMonth = document.getElementById('monthSelect').value;
+      setLoading(true, 'データ読み込み中...');
+
+      try {
+        const data = await callAPI({ action: 'getRecords', yearMonth });
+        if (data.success) {
+          allRecords = data.records;
+          renderRecords(allRecords);
+        } else {
+          showAlert(data.error || 'データ取得に失敗しました', 'error');
+        }
+      } catch (e) {
+        showAlert('通信エラーが発生しました', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    /** レコード一覧描画 */
+    function renderRecords(records) {
+      const list = document.getElementById('recordList');
+      const bar  = document.getElementById('summaryBar');
+
+      if (records.length === 0) {
+        bar.classList.add('hidden');
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <div class="empty-text">この月の経費データはありません</div>
+          </div>`;
+        return;
+      }
+
+      // 合計計算
+      const total = records.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      document.getElementById('totalAmount').textContent = '¥' + total.toLocaleString();
+      document.getElementById('recordCount').textContent = records.length + '件';
+      bar.classList.remove('hidden');
+
+      // カード生成
+      list.innerHTML = records.map((rec, idx) => `
+        <div class="record-card ${rec.isAdvancePayment ? 'advance' : ''}">
+          <div class="record-top">
+            <div class="record-payee">
+              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx+1}</span>
+              ${esc(rec.payee || '（支払先不明）')}
+            </div>
+            <div class="record-amount">¥${Number(rec.amount||0).toLocaleString()}</div>
+          </div>
+          <div class="record-meta">
+            <span>📅 ${rec.date || ''}</span>
+            <span>👤 ${esc(rec.displayName || '')}</span>
+            <span class="badge badge-primary">${esc(rec.categoryName || '')}</span>
+            ${rec.isAdvancePayment ? '<span class="badge badge-warning">💰 立替金</span>' : ''}
+            ${rec.invoiceNo ? `<span class="badge" style="background:#f1f8e9;color:#388e3c;">🔢 ${esc(rec.invoiceNo)}</span>` : ''}
+          </div>
+          ${rec.comment ? `<div class="record-comment">💬 ${esc(rec.comment)}</div>` : ''}
+          <div class="record-actions">
+            ${rec.imageFileId ? `
+              <button class="btn btn-secondary btn-sm"
+                      onclick="openImage('${rec.imageFileId}')">
+                🖼️ 画像
+              </button>` : ''}
+            <button class="btn btn-outline btn-sm"
+                    onclick="showEditModal('${esc(rec.recordId)}')">
+              ✏️ 編集
+            </button>
+            <button class="btn btn-sm" style="background:#fce8e6;color:#c62828;"
+                    onclick="deleteRecord('${esc(rec.recordId)}', '${esc(rec.payee || '')}')">
+              🗑️ 削除
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    /** HTML エスケープ */
+    function esc(str) {
+      return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ===== 画像を開く =====
+    function openImage(fileId) {
+      window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+    }
+
+    // ===== 編集モーダル =====
+    function showEditModal(recordId) {
+      const rec = allRecords.find(r => r.recordId === recordId);
+      if (!rec) return;
+
+      document.getElementById('editRecordId').value  = rec.recordId;
+      document.getElementById('editDate').value      = rec.date || '';
+      document.getElementById('editAmount').value    = rec.amount || '';
+      document.getElementById('editPayee').value     = rec.payee || '';
+      document.getElementById('editInvoiceNo').value = rec.invoiceNo || '';
+      document.getElementById('editComment').value   = rec.comment || '';
+
+      const isAdv = !!rec.isAdvancePayment;
+      document.getElementById('editIsAdvance').checked = isAdv;
+      editPrevCat = rec.categoryId || 'CAT001';
+
+      buildCategorySelect('editCategory', isAdv ? 'CAT011' : editPrevCat);
+      document.getElementById('editCategory').disabled = isAdv;
+      document.getElementById('editAdvanceGroup').style.background =
+        isAdv ? '#fff3cd' : '#fff8e1';
+
+      document.getElementById('editModal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeEditModal(event) {
+      if (event && event.target !== document.getElementById('editModal')) return;
+      document.getElementById('editModal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    /** 編集モーダル：立替金トグル */
+    function toggleEditAdvance() {
+      const cb  = document.getElementById('editIsAdvance');
+      const sel = document.getElementById('editCategory');
+      if (cb.checked) {
+        editPrevCat = sel.value || 'CAT001';
+        buildCategorySelect('editCategory', 'CAT011');
+        sel.disabled = true;
+        document.getElementById('editAdvanceGroup').style.background = '#fff3cd';
+      } else {
+        sel.disabled = false;
+        buildCategorySelect('editCategory', editPrevCat);
+        document.getElementById('editAdvanceGroup').style.background = '#fff8e1';
+      }
+    }
+
+    /** レコード更新 */
+    async function updateRecord() {
+      const recordId = document.getElementById('editRecordId').value;
+      const sel      = document.getElementById('editCategory');
+      const invoiceNo = document.getElementById('editInvoiceNo').value;
+
+      if (invoiceNo && !/^T\d{13}$/.test(invoiceNo)) {
+        alert('インボイス番号の形式が正しくありません（T + 13桁の数字）');
+        return;
+      }
+
+      setLoading(true, '更新中...');
+      try {
+        const data = await callAPI({
+          action: 'updateRecord',
+          recordId,
+          updates: {
+            date:             document.getElementById('editDate').value,
+            amount:           parseInt(document.getElementById('editAmount').value) || 0,
+            payee:            document.getElementById('editPayee').value,
+            invoiceNo:        invoiceNo,
+            categoryId:       sel.value,
+            categoryName:     sel.options[sel.selectedIndex]?.textContent || '',
+            isAdvancePayment: document.getElementById('editIsAdvance').checked,
+            comment:          document.getElementById('editComment').value
+          }
+        });
+
+        if (data.success) {
+          document.getElementById('editModal').classList.add('hidden');
+          document.body.style.overflow = '';
+          showAlert('✅ 更新しました', 'success');
+          await loadRecords();
+        } else {
+          alert('更新に失敗しました: ' + (data.error || ''));
+        }
+      } catch (e) {
+        alert('通信エラーが発生しました');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    /** レコード削除 */
+    async function deleteRecord(recordId, payee) {
+      if (!confirm(`「${payee}」を削除しますか？\nこの操作は元に戻せません。`)) return;
+
+      setLoading(true, '削除中...');
+      try {
+        const data = await callAPI({ action: 'deleteRecord', recordId });
+        if (data.success) {
+          showAlert('🗑️ 削除しました', 'info');
+          await loadRecords();
+        } else {
+          showAlert('削除に失敗しました: ' + (data.error || ''), 'error');
+        }
+      } catch (e) {
+        showAlert('通信エラーが発生しました', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // ===== レポートモーダル =====
+    function showReportModal() {
+      // 現在の月を選択
+      const curMonth = document.getElementById('monthSelect').value;
+      document.getElementById('reportMonth').value = curMonth;
+
+      // プレビュー（件数・合計）
+      const preview = document.getElementById('reportPreview');
+      if (allRecords.length > 0) {
+        const total = allRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        preview.textContent =
+          `${document.getElementById('monthSelect').options[document.getElementById('monthSelect').selectedIndex].textContent}：${allRecords.length}件 / 合計 ¥${total.toLocaleString()}`;
+        preview.classList.remove('hidden');
+      } else {
+        preview.classList.add('hidden');
+      }
+
+      // 結果エリアリセット
+      document.getElementById('reportResult').classList.add('hidden');
+      document.getElementById('reportLinks').innerHTML = '';
+      document.getElementById('generateBtn').disabled = false;
+
+      document.getElementById('reportModal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeReportModal(event) {
+      if (event && event.target !== document.getElementById('reportModal')) return;
+      document.getElementById('reportModal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    /** レポート生成 */
+    async function generateReport() {
+      const yearMonth   = document.getElementById('reportMonth').value;
+      const reportType  = document.getElementById('reportType').value;
+
+      document.getElementById('generateBtn').disabled = true;
+      setLoading(true, 'レポート生成中...\n（50件で約1分かかります）');
+
+      try {
+        const data = await callAPI({
+          action: 'generateReport',
+          yearMonth,
+          reportType
+        });
+
+        setLoading(false);
+
+        if (data.success) {
+          const links = document.getElementById('reportLinks');
+          links.innerHTML = '';
+
+          if (data.listUrl) {
+            links.innerHTML += `
+              <a href="${data.listUrl}" target="_blank"
+                 class="btn btn-outline" style="justify-content:flex-start;">
+                📊 経費一覧スプレッドシートを開く
+              </a>`;
+          }
+          if (data.pdfUrl) {
+            links.innerHTML += `
+              <a href="${data.pdfUrl}" target="_blank"
+                 class="btn btn-outline" style="justify-content:flex-start;">
+                📄 領収書画像PDFを開く
+              </a>`;
+          }
+
+          document.getElementById('reportResult').classList.remove('hidden');
+        } else {
+          alert('レポート生成に失敗しました: ' + (data.error || ''));
+          document.getElementById('generateBtn').disabled = false;
+        }
+      } catch (e) {
+        setLoading(false);
+        alert('通信エラーが発生しました');
+        document.getElementById('generateBtn').disabled = false;
+      }
+    }
+
+    // ===== 画面遷移・ログアウト =====
+    function goInput() {
+      location.href = APP_URL + '?page=index';
+    }
+    async function doLogout() {
+      if (!confirm('ログアウトしますか？')) return;
+      try { await callAPI({ action: 'logout' }); } catch (e) {}
+      sessionStorage.clear();
+      location.href = APP_URL + '?page=login';
+    }
+  </script>
+</body>
+</html>
