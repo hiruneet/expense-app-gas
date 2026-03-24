@@ -197,26 +197,6 @@ function extractPayee(text) {
 }
 
 
-function testOCR() {
-  const testText = `〇〇株式会社
-2026年3月20日
-合計 ¥1,500
-T1234567890123`;
-
-  Logger.log('日付: ' + extractDate(testText));
-  Logger.log('金額: ' + extractAmount(testText));
-  Logger.log('支払先: ' + extractPayee(testText));
-  Logger.log('インボイス: ' + extractInvoiceNo(testText));
-}
-function testVisionAPI() {
-  // APIキーが取得できているか確認
-  const apiKey = getSettings('vision_api_key');
-  Logger.log('APIキー: ' + (apiKey ? apiKey.substring(0, 10) + '...' : '❌ 未設定'));
-
-  if (!apiKey) {
-    Logger.log('エラー: settings シートの vision_api_key を確認してください');
-    return;
-  }
 
   // 最小限のテスト画像（「TEST 1234」と書かれた1x1のbase64画像）
   // 実際には小さなテキスト画像で試す

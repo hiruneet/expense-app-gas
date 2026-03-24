@@ -121,7 +121,7 @@ function initialSetup() {
  * パスワードハッシュ生成ユーティリティ（ユーザー登録時に使用）
  */
 function generatePasswordHash(password) {
-  const rawHash = password || 'familia01'; // 作成するパスワードを入力する
+  const rawHash = password || 'your_password_here'; // 作成するパスワードを入力する
   const bytes = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
     rawHash,
