@@ -1,4 +1,4 @@
-//ver1
+<!-- ver2 auth-query保持版 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -21,16 +21,31 @@
         <h1>📋 経費履歴</h1>
         <div class="header-sub" id="headerUser"></div>
       </div>
-      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;border:none;"
-              onclick="doLogout()">ログアウト</button>
+      <button
+        type="button"
+        class="btn btn-sm"
+        style="background:rgba(255,255,255,0.2);color:#fff;border:none;"
+        onclick="doLogout()"
+      >
+        ログアウト
+      </button>
     </header>
 
     <main class="app-main">
       <!-- 月選択 + レポートボタン -->
       <div class="flex-between" style="margin-bottom:12px;gap:8px;">
-        <select id="monthSelect" class="form-control" style="flex:1;"
-                onchange="loadRecords()"></select>
-        <button class="btn btn-outline btn-sm" onclick="showReportModal()">
+        <select
+          id="monthSelect"
+          class="form-control"
+          style="flex:1;"
+          onchange="loadRecords()"
+        ></select>
+
+        <button
+          type="button"
+          class="btn btn-outline btn-sm"
+          onclick="showReportModal()"
+        >
           📊 レポート
         </button>
       </div>
@@ -53,13 +68,13 @@
 
     <!-- ボトムナビ -->
     <nav class="bottom-nav">
-      <button class="nav-btn" onclick="goInput()">
+      <button type="button" class="nav-btn" onclick="goInput()">
         <span class="nav-icon">➕</span>新規入力
       </button>
-      <button class="nav-btn active">
+      <button type="button" class="nav-btn active">
         <span class="nav-icon">📋</span>履歴
       </button>
-      <button class="nav-btn" onclick="doLogout()">
+      <button type="button" class="nav-btn" onclick="doLogout()">
         <span class="nav-icon">🚪</span>ログアウト
       </button>
     </nav>
@@ -73,9 +88,17 @@
 
       <input type="hidden" id="editRecordId">
 
-      <div class="check-group" id="editAdvanceGroup" style="margin-bottom:14px;"
-           onclick="toggleEditAdvance()">
-        <input type="checkbox" id="editIsAdvance" onclick="event.stopPropagation(); toggleEditAdvance()">
+      <div
+        class="check-group"
+        id="editAdvanceGroup"
+        style="margin-bottom:14px;"
+        onclick="toggleEditAdvance()"
+      >
+        <input
+          type="checkbox"
+          id="editIsAdvance"
+          onclick="event.stopPropagation(); toggleEditAdvance()"
+        >
         <label>💰 立替金として処理する</label>
       </div>
 
@@ -83,33 +106,53 @@
         <label class="form-label">📅 日付</label>
         <input type="date" id="editDate" class="form-control">
       </div>
+
       <div class="form-group">
         <label class="form-label">💴 金額（円）</label>
         <input type="number" id="editAmount" class="form-control" min="0">
       </div>
+
       <div class="form-group">
         <label class="form-label">🏪 支払先</label>
         <input type="text" id="editPayee" class="form-control">
       </div>
+
       <div class="form-group">
         <label class="form-label">🔢 インボイス番号</label>
-        <input type="text" id="editInvoiceNo" class="form-control"
-               placeholder="T1234567890123 または空白" maxlength="14">
+        <input
+          type="text"
+          id="editInvoiceNo"
+          class="form-control"
+          placeholder="T1234567890123 または空白"
+          maxlength="14"
+        >
       </div>
+
       <div class="form-group">
         <label class="form-label">📂 費目</label>
         <select id="editCategory" class="form-control"></select>
       </div>
+
       <div class="form-group">
         <label class="form-label">💬 コメント</label>
         <textarea id="editComment" class="form-control" rows="2"></textarea>
       </div>
 
       <div class="flex" style="gap:8px;margin-top:8px;">
-        <button class="btn btn-secondary" style="flex:1;" onclick="closeEditModal()">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          style="flex:1;"
+          onclick="closeEditModal()"
+        >
           キャンセル
         </button>
-        <button class="btn btn-primary" style="flex:1;" onclick="updateRecord()">
+        <button
+          type="button"
+          class="btn btn-primary"
+          style="flex:1;"
+          onclick="updateRecord()"
+        >
           💾 保存する
         </button>
       </div>
@@ -147,11 +190,21 @@
       </div>
 
       <div class="flex" style="gap:8px;margin-top:16px;">
-        <button class="btn btn-secondary" style="flex:1;" onclick="closeReportModal()">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          style="flex:1;"
+          onclick="closeReportModal()"
+        >
           閉じる
         </button>
-        <button id="generateBtn" class="btn btn-primary" style="flex:1;"
-                onclick="generateReport()">
+        <button
+          type="button"
+          id="generateBtn"
+          class="btn btn-primary"
+          style="flex:1;"
+          onclick="generateReport()"
+        >
           📊 生成する
         </button>
       </div>
@@ -160,28 +213,30 @@
 
   <script>
     // ============================================================
-    // history.html - クライアントサイドJS（修正版）
+    // history.html - クライアントサイドJS（auth query保持版）
     // ============================================================
 
-    const APP_URL      = window.location.origin + window.location.pathname;
-    const TOKEN        = sessionStorage.getItem('token');
-    const GROUP_NAME   = sessionStorage.getItem('groupName');
-    const DISPLAY_NAME = sessionStorage.getItem('displayName');
-    const ROLE         = sessionStorage.getItem('role');
+    // API呼び出しは bare な /exec
+    const API_URL = window.location.origin + window.location.pathname;
 
-    let allRecords   = [];
-    let categories   = [];
-    let editPrevCat  = 'CAT001';
-
+    // 画面遷移は現在URLをベースに page だけ差し替え
     function buildPageUrl(page) {
-      const url = new URL(APP_URL);
+      const url = new URL(window.location.href);
       url.searchParams.set('page', page);
       return url.toString();
     }
 
+    const TOKEN        = sessionStorage.getItem('token');
+    const GROUP_NAME   = sessionStorage.getItem('groupName');
+    const DISPLAY_NAME = sessionStorage.getItem('displayName');
+
+    let allRecords = [];
+    let categories = [];
+    let editPrevCat = 'CAT001';
+
     /** GAS API 呼び出し */
     async function callAPI(params) {
-      const res = await fetch(APP_URL, {
+      const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(params),
@@ -232,8 +287,8 @@
           return;
         }
 
-        // 現在の /exec URL を保存
-        sessionStorage.setItem('appUrl', APP_URL);
+        // login.html 既存処理との整合用
+        sessionStorage.setItem('appUrl', API_URL);
 
         document.getElementById('headerUser').textContent =
           `${GROUP_NAME || ''} / ${DISPLAY_NAME || ''}`;
@@ -247,7 +302,6 @@
 
         // 初期レコード表示
         await loadRecords();
-
       } catch (e) {
         console.error('history init error:', e);
         showAlert('履歴画面の初期化に失敗しました: ' + (e.message || e), 'error');
@@ -256,15 +310,22 @@
       }
     })();
 
-    /** 月選択プルダウン生成（直近12ヶ月） */
+    /** 月選択プルダウン生成（直近12ヶ月）
+     *  Sheets.js の getRecords() は row[4] の日付文字列に対して startsWith(yearMonth) を使うため、
+     *  値は YYYYMM ではなく YYYY-MM にする
+     */
     function buildMonthSelect(elemId) {
       const sel = document.getElementById(elemId);
       sel.innerHTML = '';
+
       const now = new Date();
       for (let i = 0; i < 12; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const val = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
-        const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const val = `${yyyy}-${mm}`;
+        const label = `${yyyy}年${d.getMonth() + 1}月`;
+
         const opt = document.createElement('option');
         opt.value = val;
         opt.textContent = label;
@@ -276,6 +337,7 @@
     async function loadCategories() {
       try {
         const data = await callAPI({ action: 'getCategories' });
+
         if (data.success && Array.isArray(data.categories)) {
           categories = data.categories.map(c => ({
             categoryId: c.categoryId || c.code || '',
@@ -294,6 +356,7 @@
     function buildCategorySelect(elemId, selectedId) {
       const sel = document.getElementById(elemId);
       sel.innerHTML = '';
+
       categories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.categoryId;
@@ -336,34 +399,34 @@
     /** レコード一覧描画 */
     function renderRecords(records) {
       const list = document.getElementById('recordList');
-      const bar  = document.getElementById('summaryBar');
+      const bar = document.getElementById('summaryBar');
 
-      if (records.length === 0) {
+      if (!records.length) {
         bar.classList.add('hidden');
         list.innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">📭</div>
             <div class="empty-text">この月の経費データはありません</div>
-          </div>`;
+          </div>
+        `;
         return;
       }
 
-      // 合計計算
       const total = records.reduce((s, r) => s + (Number(r.amount) || 0), 0);
       document.getElementById('totalAmount').textContent = '¥' + total.toLocaleString();
       document.getElementById('recordCount').textContent = records.length + '件';
       bar.classList.remove('hidden');
 
-      // カード生成
       list.innerHTML = records.map((rec, idx) => `
         <div class="record-card ${rec.isAdvancePayment ? 'advance' : ''}">
           <div class="record-top">
             <div class="record-payee">
-              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx+1}</span>
+              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx + 1}</span>
               ${esc(rec.payee || '（支払先不明）')}
             </div>
-            <div class="record-amount">¥${Number(rec.amount||0).toLocaleString()}</div>
+            <div class="record-amount">¥${Number(rec.amount || 0).toLocaleString()}</div>
           </div>
+
           <div class="record-meta">
             <span>📅 ${esc(rec.date || '')}</span>
             <span>👤 ${esc(rec.displayName || '')}</span>
@@ -371,19 +434,34 @@
             ${rec.isAdvancePayment ? '<span class="badge badge-warning">💰 立替金</span>' : ''}
             ${rec.invoiceNo ? `<span class="badge" style="background:#f1f8e9;color:#388e3c;">🔢 ${esc(rec.invoiceNo)}</span>` : ''}
           </div>
+
           ${rec.comment ? `<div class="record-comment">💬 ${esc(rec.comment)}</div>` : ''}
+
           <div class="record-actions">
             ${rec.imageFileId ? `
-              <button class="btn btn-secondary btn-sm"
-                      onclick="openImage('${esc(rec.imageFileId)}')">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                onclick="openImage('${esc(rec.imageFileId)}')"
+              >
                 🖼️ 画像
-              </button>` : ''}
-            <button class="btn btn-outline btn-sm"
-                    onclick="showEditModal('${esc(rec.recordId)}')">
+              </button>
+            ` : ''}
+
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              onclick="showEditModal('${esc(rec.recordId)}')"
+            >
               ✏️ 編集
             </button>
-            <button class="btn btn-sm" style="background:#fce8e6;color:#c62828;"
-                    onclick="deleteRecord('${esc(rec.recordId)}', '${esc(rec.payee || '')}')">
+
+            <button
+              type="button"
+              class="btn btn-sm"
+              style="background:#fce8e6;color:#c62828;"
+              onclick="deleteRecord('${esc(rec.recordId)}', '${esc(rec.payee || '')}')"
+            >
               🗑️ 削除
             </button>
           </div>
@@ -394,11 +472,11 @@
     /** HTML エスケープ */
     function esc(str) {
       return String(str)
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;')
-        .replace(/'/g,'&#39;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // ===== 画像を開く =====
@@ -411,15 +489,16 @@
       const rec = allRecords.find(r => r.recordId === recordId);
       if (!rec) return;
 
-      document.getElementById('editRecordId').value  = rec.recordId;
-      document.getElementById('editDate').value      = rec.date || '';
-      document.getElementById('editAmount').value    = rec.amount || '';
-      document.getElementById('editPayee').value     = rec.payee || '';
+      document.getElementById('editRecordId').value = rec.recordId;
+      document.getElementById('editDate').value = rec.date || '';
+      document.getElementById('editAmount').value = rec.amount || '';
+      document.getElementById('editPayee').value = rec.payee || '';
       document.getElementById('editInvoiceNo').value = rec.invoiceNo || '';
-      document.getElementById('editComment').value   = rec.comment || '';
+      document.getElementById('editComment').value = rec.comment || '';
 
       const isAdv = !!rec.isAdvancePayment;
       document.getElementById('editIsAdvance').checked = isAdv;
+
       editPrevCat = rec.categoryId || 'CAT001';
 
       buildCategorySelect('editCategory', isAdv ? 'CAT011' : editPrevCat);
@@ -439,8 +518,9 @@
 
     /** 編集モーダル：立替金トグル */
     function toggleEditAdvance() {
-      const cb  = document.getElementById('editIsAdvance');
+      const cb = document.getElementById('editIsAdvance');
       const sel = document.getElementById('editCategory');
+
       if (cb.checked) {
         editPrevCat = sel.value || 'CAT001';
         buildCategorySelect('editCategory', 'CAT011');
@@ -456,7 +536,7 @@
     /** レコード更新 */
     async function updateRecord() {
       const recordId = document.getElementById('editRecordId').value;
-      const sel      = document.getElementById('editCategory');
+      const sel = document.getElementById('editCategory');
       const invoiceNo = document.getElementById('editInvoiceNo').value;
 
       if (invoiceNo && !/^T\d{13}$/.test(invoiceNo)) {
@@ -465,20 +545,21 @@
       }
 
       setLoading(true, '更新中...');
+
       try {
         const data = await callAPI({
           action: 'updateRecord',
           token: TOKEN,
           recordId,
           updates: {
-            date:             document.getElementById('editDate').value,
-            amount:           parseInt(document.getElementById('editAmount').value) || 0,
-            payee:            document.getElementById('editPayee').value,
-            invoiceNo:        invoiceNo,
-            categoryId:       sel.value,
-            categoryName:     sel.options[sel.selectedIndex]?.textContent || '',
+            date: document.getElementById('editDate').value,
+            amount: parseInt(document.getElementById('editAmount').value, 10) || 0,
+            payee: document.getElementById('editPayee').value,
+            invoiceNo: invoiceNo,
+            categoryId: sel.value,
+            categoryName: sel.options[sel.selectedIndex]?.textContent || '',
             isAdvancePayment: document.getElementById('editIsAdvance').checked,
-            comment:          document.getElementById('editComment').value
+            comment: document.getElementById('editComment').value
           }
         });
 
@@ -503,12 +584,14 @@
       if (!confirm(`「${payee}」を削除しますか？\nこの操作は元に戻せません。`)) return;
 
       setLoading(true, '削除中...');
+
       try {
         const data = await callAPI({
           action: 'deleteRecord',
           token: TOKEN,
           recordId
         });
+
         if (data.success) {
           showAlert('🗑️ 削除しました', 'info');
           await loadRecords();
@@ -525,11 +608,9 @@
 
     // ===== レポートモーダル =====
     function showReportModal() {
-      // 現在の月を選択
       const curMonth = document.getElementById('monthSelect').value;
       document.getElementById('reportMonth').value = curMonth;
 
-      // プレビュー（件数・合計）
       const preview = document.getElementById('reportPreview');
       if (allRecords.length > 0) {
         const total = allRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -540,7 +621,6 @@
         preview.classList.add('hidden');
       }
 
-      // 結果エリアリセット
       document.getElementById('reportResult').classList.add('hidden');
       document.getElementById('reportLinks').innerHTML = '';
       document.getElementById('generateBtn').disabled = false;
@@ -557,8 +637,8 @@
 
     /** レポート生成 */
     async function generateReport() {
-      const yearMonth   = document.getElementById('reportMonth').value;
-      const reportType  = document.getElementById('reportType').value;
+      const yearMonth = document.getElementById('reportMonth').value;
+      const reportType = document.getElementById('reportType').value;
 
       document.getElementById('generateBtn').disabled = true;
       setLoading(true, 'レポート生成中...\n（50件で約1分かかります）');
@@ -577,17 +657,28 @@
 
           if (data.listUrl) {
             links.innerHTML += `
-              <a href="${data.listUrl}" target="_blank"
-                 class="btn btn-outline" style="justify-content:flex-start;">
+              <a
+                href="${data.listUrl}"
+                target="_blank"
+                class="btn btn-outline"
+                style="justify-content:flex-start;"
+              >
                 📊 経費一覧スプレッドシートを開く
-              </a>`;
+              </a>
+            `;
           }
+
           if (data.pdfUrl) {
             links.innerHTML += `
-              <a href="${data.pdfUrl}" target="_blank"
-                 class="btn btn-outline" style="justify-content:flex-start;">
+              <a
+                href="${data.pdfUrl}"
+                target="_blank"
+                class="btn btn-outline"
+                style="justify-content:flex-start;"
+              >
                 📄 領収書画像PDFを開く
-              </a>`;
+              </a>
+            `;
           }
 
           document.getElementById('reportResult').classList.remove('hidden');
@@ -618,6 +709,7 @@
       } catch (e) {
         console.warn('logout API failed:', e);
       }
+
       sessionStorage.clear();
       location.href = buildPageUrl('login');
     }
