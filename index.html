@@ -1,407 +1,229 @@
-<!-- ver4 single-page unified input + history / API_URL+timeout fixed -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>経費精算アプリ</title>
-  <?!= include('stylesheet'); ?>
+  <title>DIAG INDEX</title>
+  <style>
+    body {
+      font-family: Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      margin: 0;
+      background: #f5f7fb;
+      color: #222;
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    .ok { background: #e6f4ea; color: #137333; }
+    .ng { background: #fce8e6; color: #c5221f; }
+    .info { background: #e8f0fe; color: #174ea6; }
+    .warn { background: #fff4e5; color: #b06000; }
+
+    .row {
+      margin: 8px 0;
+      word-break: break-all;
+      font-size: 14px;
+    }
+    .label {
+      font-weight: bold;
+      display: inline-block;
+      min-width: 130px;
+      color: #555;
+    }
+
+    .btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 14px;
+      background: #1a73e8;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #5f6368;
+    }
+    button.danger {
+      background: #d93025;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      min-height: 200px;
+      overflow: auto;
+    }
+
+    .mini {
+      font-size: 12px;
+      color: #666;
+    }
+    .big {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .divider {
+      height: 1px;
+      background: #e5e7eb;
+      margin: 12px 0;
+    }
+    .resultBox {
+      background: #f8fafc;
+      border: 1px solid #dbe3ea;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
 </head>
 <body>
-  <!-- ローディング -->
-  <div id="loading" class="loading-overlay hidden">
-    <div class="spinner"></div>
-    <div id="loadingText" class="loading-text">処理中...</div>
-  </div>
-
-  <div class="app-container">
-    <!-- ヘッダー -->
-    <header class="app-header">
-      <div>
-        <h1 id="pageTitle">🧾 経費入力</h1>
-        <div class="header-sub" id="headerUser">読み込み中...</div>
-      </div>
-      <button
-        type="button"
-        class="btn btn-sm"
-        style="background:rgba(255,255,255,0.2);color:#fff;border:none;"
-        onclick="doLogout()"
-      >
-        ログアウト
-      </button>
-    </header>
-
-    <main class="app-main">
-      <!-- グローバルメッセージ -->
-      <div id="alertMsg" class="hidden"></div>
-
-      <!-- =========================
-           入力ビュー
-           ========================= -->
-      <section id="inputView">
-        <!-- 撮影エリア -->
-        <div class="card">
-          <div class="card-title">📷 領収書を撮影</div>
-
-          <div
-            class="preview-area"
-            id="previewArea"
-            onclick="document.getElementById('cameraInput').click()"
-          >
-            <div class="preview-placeholder" id="previewPlaceholder">
-              <div class="ph-icon">📷</div>
-              <p>タップして撮影 / 画像を選択</p>
-            </div>
-            <img id="previewImg" class="hidden" alt="領収書プレビュー">
-          </div>
-
-          <input
-            type="file"
-            id="cameraInput"
-            accept="image/*"
-            capture="environment"
-            style="display:none"
-            onchange="handleImageSelect(event)"
-          >
-
-          <div class="flex" style="gap:8px;margin-top:10px;">
-            <button
-              type="button"
-              class="btn btn-outline"
-              style="flex:1;"
-              onclick="document.getElementById('cameraInput').click()"
-            >
-              📷 カメラ
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              style="flex:1;"
-              onclick="document.getElementById('galleryInput').click()"
-            >
-              🖼️ ギャラリー
-            </button>
-          </div>
-
-          <input
-            type="file"
-            id="galleryInput"
-            accept="image/*"
-            style="display:none"
-            onchange="handleImageSelect(event)"
-          >
-
-          <button
-            type="button"
-            id="ocrBtn"
-            class="btn btn-primary mt-8"
-            disabled
-            onclick="runOCR()"
-          >
-            <span class="btn-icon">🔍</span> OCRで自動読取
-          </button>
-
-          <div id="ocrStatus" class="text-sub text-center mt-8 hidden"></div>
-        </div>
-
-        <!-- 入力フォーム -->
-        <div class="card">
-          <div class="card-title">📝 経費情報</div>
-
-          <div
-            class="check-group"
-            id="advancePayGroup"
-            style="margin-bottom:14px;"
-            onclick="toggleAdvance()"
-          >
-            <input
-              type="checkbox"
-              id="isAdvancePayment"
-              onclick="event.stopPropagation(); toggleAdvance()"
-            >
-            <label for="isAdvancePayment">💰 立替金として処理する</label>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">📅 日付 <span class="text-danger">*</span></label>
-            <input type="date" id="expenseDate" class="form-control" required>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">💴 金額（円） <span class="text-danger">*</span></label>
-            <input
-              type="number"
-              id="amount"
-              class="form-control"
-              placeholder="例：1500"
-              min="0"
-              inputmode="numeric"
-            >
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">🏪 支払先</label>
-            <input
-              type="text"
-              id="payee"
-              class="form-control"
-              placeholder="例：〇〇パーキング"
-            >
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">🔢 インボイス番号</label>
-            <input
-              type="text"
-              id="invoiceNo"
-              class="form-control"
-              placeholder="例：T1234567890123（なければ空白）"
-              maxlength="14"
-              pattern="^T\d{13}$|^$"
-            >
-            <div
-              id="invoiceError"
-              class="text-danger hidden"
-              style="font-size:12px;margin-top:4px;"
-            >
-              形式が正しくありません（T + 13桁の数字）
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">📂 費目</label>
-            <select id="categorySelect" class="form-control">
-              <option value="">読み込み中...</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">💬 コメント</label>
-            <textarea
-              id="comment"
-              class="form-control"
-              placeholder="メモや補足を入力（任意）"
-              rows="2"
-            ></textarea>
-          </div>
-
-          <button
-            type="button"
-            id="saveBtn"
-            class="btn btn-primary"
-            disabled
-            onclick="saveRecord()"
-          >
-            <span class="btn-icon">💾</span> 登録する
-          </button>
-
-          <div class="text-sub text-center mt-8" id="saveHint">
-            ※ 画像を選択すると登録できます
-          </div>
-        </div>
-      </section>
-
-      <!-- =========================
-           履歴ビュー
-           ========================= -->
-      <section id="historyView" class="hidden">
-        <div class="flex-between" style="margin-bottom:12px;gap:8px;">
-          <select
-            id="monthSelect"
-            class="form-control"
-            style="flex:1;"
-            onchange="loadRecords()"
-          ></select>
-
-          <button
-            type="button"
-            class="btn btn-outline btn-sm"
-            onclick="showReportModal()"
-          >
-            📊 レポート
-          </button>
-        </div>
-
-        <div class="summary-bar hidden" id="summaryBar">
-          <div>
-            <div class="sum-label">合計金額</div>
-            <div class="sum-value" id="totalAmount">¥0</div>
-          </div>
-          <div class="sum-count" id="recordCount">0件</div>
-        </div>
-
-        <div id="recordList"></div>
-      </section>
-    </main>
-
-    <!-- ボトムナビ -->
-    <nav class="bottom-nav">
-      <button type="button" id="navInput" class="nav-btn active" onclick="showView('input')">
-        <span class="nav-icon">➕</span>新規入力
-      </button>
-      <button type="button" id="navHistory" class="nav-btn" onclick="showView('history')">
-        <span class="nav-icon">📋</span>履歴
-      </button>
-      <button type="button" class="nav-btn" onclick="doLogout()">
-        <span class="nav-icon">🚪</span>ログアウト
-      </button>
-    </nav>
-  </div>
-
-  <!-- ===== 編集モーダル ===== -->
-  <div id="editModal" class="modal-overlay hidden" onclick="closeEditModal(event)">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title">✏️ 経費を編集</div>
-
-      <input type="hidden" id="editRecordId">
-
-      <div
-        class="check-group"
-        id="editAdvanceGroup"
-        style="margin-bottom:14px;"
-        onclick="toggleEditAdvance()"
-      >
-        <input
-          type="checkbox"
-          id="editIsAdvance"
-          onclick="event.stopPropagation(); toggleEditAdvance()"
-        >
-        <label>💰 立替金として処理する</label>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">📅 日付</label>
-        <input type="date" id="editDate" class="form-control">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">💴 金額（円）</label>
-        <input type="number" id="editAmount" class="form-control" min="0">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">🏪 支払先</label>
-        <input type="text" id="editPayee" class="form-control">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">🔢 インボイス番号</label>
-        <input
-          type="text"
-          id="editInvoiceNo"
-          class="form-control"
-          placeholder="T1234567890123 または空白"
-          maxlength="14"
-        >
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">📂 費目</label>
-        <select id="editCategory" class="form-control"></select>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">💬 コメント</label>
-        <textarea id="editComment" class="form-control" rows="2"></textarea>
-      </div>
-
-      <div class="flex" style="gap:8px;margin-top:8px;">
-        <button
-          type="button"
-          class="btn btn-secondary"
-          style="flex:1;"
-          onclick="closeEditModal()"
-        >
-          キャンセル
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          style="flex:1;"
-          onclick="updateRecord()"
-        >
-          💾 保存する
-        </button>
+  <div class="wrap">
+    <div class="card">
+      <h1>DIAG INDEX VER-DIAG-1</h1>
+      <div class="big">この文字が見えていれば、最新の index.html は配信されています。</div>
+      <div class="mini" style="margin-top:8px;">
+        もしこの見出しが見えなければ、コード未反映か別デプロイを見ています。
       </div>
     </div>
-  </div>
 
-  <!-- ===== レポートモーダル ===== -->
-  <div id="reportModal" class="modal-overlay hidden" onclick="closeReportModal(event)">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title">📊 月次レポート出力</div>
-
-      <div class="form-group">
-        <label class="form-label">📅 対象月</label>
-        <select id="reportMonth" class="form-control"></select>
+    <div class="card">
+      <div id="jsStatusArea">
+        <span class="badge warn">JS未実行</span>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">📄 出力種別</label>
-        <select id="reportType" class="form-control">
-          <option value="both">両方（経費一覧 + 画像PDF）</option>
-          <option value="list">経費一覧スプレッドシートのみ</option>
-          <option value="pdf">領収書画像PDFのみ</option>
-        </select>
+      <div class="row"><span class="label">APP_URL</span><span id="appUrlText">-</span></div>
+      <div class="row"><span class="label">location.href</span><span id="locationText">-</span></div>
+      <div class="row"><span class="label">token有無</span><span id="tokenText">-</span></div>
+      <div class="row"><span class="label">groupId</span><span id="groupIdText">-</span></div>
+      <div class="row"><span class="label">userId</span><span id="userIdText">-</span></div>
+      <div class="row"><span class="label">displayName</span><span id="displayNameText">-</span></div>
+      <div class="row"><span class="label">currentMonth</span><span id="monthText">-</span></div>
+    </div>
+
+    <div class="card">
+      <div class="big" style="margin-bottom:10px;">診断ボタン</div>
+      <div class="btns">
+        <button onclick="runBootCheck()">1) 起動確認を再実行</button>
+        <button onclick="testValidateSession()">2) validateSession</button>
+        <button onclick="testGetCategories()">3) getCategories</button>
+        <button onclick="testGetRecords()">4) getRecords</button>
+        <button onclick="runAllTests()">5) 全テスト順番実行</button>
+        <button class="danger" onclick="testLogout()">6) logout API</button>
+        <button class="secondary" onclick="goLogin()">ログイン画面へ戻る</button>
+        <button class="secondary" onclick="clearLog()">ログ消去</button>
       </div>
 
-      <div id="reportPreview" class="alert alert-info hidden"></div>
+      <div class="divider"></div>
 
-      <div id="reportResult" class="hidden">
-        <div class="divider"></div>
-        <div class="alert alert-success">✅ レポートが生成されました</div>
-        <div id="reportLinks" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="row">
+        <span class="label">直近レスポンス</span>
       </div>
+      <div id="lastResult" class="resultBox">まだ実行していません</div>
+    </div>
 
-      <div class="flex" style="gap:8px;margin-top:16px;">
-        <button
-          type="button"
-          class="btn btn-secondary"
-          style="flex:1;"
-          onclick="closeReportModal()"
-        >
-          閉じる
-        </button>
-        <button
-          type="button"
-          id="generateBtn"
-          class="btn btn-primary"
-          style="flex:1;"
-          onclick="generateReport()"
-        >
-          📊 生成する
-        </button>
-      </div>
+    <div class="card">
+      <div class="big" style="margin-bottom:10px;">画面ログ</div>
+      <pre id="logArea"></pre>
     </div>
   </div>
 
   <script>
-    // ============================================================
-    // index.html - 入力ビュー + 履歴ビュー統合版（API_URL/timeout修正版）
-    // ============================================================
+    const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
 
-    // login.html と同じ Apps Script URL を API 呼び出し先に使う
-    const API_URL = '<?= ScriptApp.getService().getUrl(); ?>';
-
-    let currentUser = null;
-    let currentImageDataUrl = null;
-    let currentView = 'input';
-    let allRecords = [];
-    let categories = [];
-    let editPrevCat = 'CAT001';
-
-    function buildLoginUrl() {
-      return API_URL;
+    function nowText() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
     }
 
-    async function callAPI(params, timeoutMs = 15000) {
+    function log(msg) {
+      const area = document.getElementById('logArea');
+      area.textContent += `[${nowText()}] ${msg}\n`;
+      area.scrollTop = area.scrollHeight;
+      console.log(msg);
+    }
+
+    function setLastResult(obj) {
+      const el = document.getElementById('lastResult');
+      if (typeof obj === 'string') {
+        el.textContent = obj;
+      } else {
+        try {
+          el.textContent = JSON.stringify(obj, null, 2);
+        } catch (e) {
+          el.textContent = String(obj);
+        }
+      }
+    }
+
+    function setJsStatus(ok, text) {
+      const area = document.getElementById('jsStatusArea');
+      area.innerHTML = '';
+      const span = document.createElement('span');
+      span.className = 'badge ' + (ok ? 'ok' : 'ng');
+      span.textContent = text;
+      area.appendChild(span);
+    }
+
+    function currentYearMonth() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}`;
+    }
+
+    async function callAPI(params, timeoutMs) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeout(function() {
+        controller.abort();
+      }, timeoutMs || 10000);
 
       try {
-        const res = await fetch(API_URL, {
+        log(`API開始: action=${params.action || '(none)'} timeout=${timeoutMs || 10000}ms`);
+
+        const res = await fetch(APP_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(params),
@@ -410,20 +232,23 @@
         });
 
         const text = await res.text();
+        log(`HTTP完了: status=${res.status}, bodyLength=${text ? text.length : 0}`);
 
         if (!text) {
-          throw new Error('APIレスポンスが空です');
+          throw new Error('レスポンス本文が空です');
         }
 
         try {
-          return JSON.parse(text);
-        } catch (parseErr) {
-          console.error('API parse error:', text);
-          throw new Error('APIレスポンスの解析に失敗しました');
+          const json = JSON.parse(text);
+          setLastResult(json);
+          return json;
+        } catch (e) {
+          setLastResult(text);
+          throw new Error('JSON解析失敗: ' + text.slice(0, 300));
         }
       } catch (err) {
         if (err.name === 'AbortError') {
-          throw new Error('通信がタイムアウトしました');
+          throw new Error('タイムアウトしました');
         }
         throw err;
       } finally {
@@ -431,734 +256,155 @@
       }
     }
 
-    function showLoading(text = '処理中...') {
-      document.getElementById('loadingText').textContent = text;
-      document.getElementById('loading').classList.remove('hidden');
+    function fillBasicInfo() {
+      document.getElementById('appUrlText').textContent = APP_URL;
+      document.getElementById('locationText').textContent = window.location.href;
+      document.getElementById('tokenText').textContent =
+        sessionStorage.getItem('token') ? 'あり' : 'なし';
+      document.getElementById('groupIdText').textContent =
+        sessionStorage.getItem('groupId') || '(空)';
+      document.getElementById('userIdText').textContent =
+        sessionStorage.getItem('userId') || '(空)';
+      document.getElementById('displayNameText').textContent =
+        sessionStorage.getItem('displayName') || '(空)';
+      document.getElementById('monthText').textContent = currentYearMonth();
     }
 
-    function hideLoading() {
-      document.getElementById('loading').classList.add('hidden');
-    }
+    async function runBootCheck() {
+      log('===== 起動確認開始 =====');
+      setJsStatus(true, 'JS実行中');
+      fillBasicInfo();
 
-    function showAlert(msg, type = 'info') {
-      const el = document.getElementById('alertMsg');
-      el.className = `alert alert-${type}`;
-      el.textContent = msg;
-      el.classList.remove('hidden');
-
-      if (type === 'success' || type === 'info') {
-        setTimeout(() => el.classList.add('hidden'), 3000);
-      }
-    }
-
-    function hideAlert() {
-      document.getElementById('alertMsg').classList.add('hidden');
-    }
-
-    function esc(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function setToday() {
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      document.getElementById('expenseDate').value = `${yyyy}-${mm}-${dd}`;
-    }
-
-    function updateHeaderTitle() {
-      document.getElementById('pageTitle').textContent =
-        currentView === 'history' ? '📋 経費履歴' : '🧾 経費入力';
-    }
-
-    async function showView(viewName) {
-      currentView = viewName;
-
-      document.getElementById('inputView').classList.toggle('hidden', viewName !== 'input');
-      document.getElementById('historyView').classList.toggle('hidden', viewName !== 'history');
-
-      document.getElementById('navInput').classList.toggle('active', viewName === 'input');
-      document.getElementById('navHistory').classList.toggle('active', viewName === 'history');
-
-      updateHeaderTitle();
-      hideAlert();
-
-      if (viewName === 'history') {
-        await loadRecords();
-      }
-    }
-
-    function buildMonthSelect(elemId) {
-      const sel = document.getElementById(elemId);
-      sel.innerHTML = '';
-
-      const now = new Date();
-      for (let i = 0; i < 12; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const val = `${yyyy}-${mm}`;
-        const label = `${yyyy}年${d.getMonth() + 1}月`;
-
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = label;
-        sel.appendChild(opt);
-      }
-    }
-
-    async function loadCategories() {
-      try {
-        const result = await callAPI({ action: 'getCategories' });
-        categories = [];
-
-        if (result.success && Array.isArray(result.categories)) {
-          categories = result.categories.map(cat => ({
-            categoryId: cat.categoryId || cat.code || '',
-            categoryName: cat.categoryName || cat.name || ''
-          }));
-        }
-
-        buildInputCategorySelect();
-      } catch (err) {
-        console.error('カテゴリ取得エラー:', err);
-        categories = [];
-        buildInputCategorySelect();
-        showAlert('カテゴリ情報の取得に失敗しました', 'warning');
-      }
-    }
-
-    function buildInputCategorySelect() {
-      const sel = document.getElementById('categorySelect');
-      sel.innerHTML = '<option value="">-- 費目を選択 --</option>';
-
-      categories.forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat.categoryId;
-        opt.textContent = cat.categoryName;
-        sel.appendChild(opt);
-      });
-    }
-
-    function buildCategorySelect(elemId, selectedId) {
-      const sel = document.getElementById(elemId);
-      sel.innerHTML = '';
-
-      categories.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.categoryId;
-        opt.textContent = c.categoryName;
-        if (c.categoryId === selectedId) opt.selected = true;
-        sel.appendChild(opt);
-      });
-    }
-
-    async function init() {
       const token = sessionStorage.getItem('token');
-      const userId = sessionStorage.getItem('userId');
-      const userName = sessionStorage.getItem('displayName');
-      const groupId = sessionStorage.getItem('groupId');
-      const groupName = sessionStorage.getItem('groupName');
-
       if (!token) {
-        location.href = buildLoginUrl();
+        log('token が無いので validateSession は未実行');
+        setLastResult('token が sessionStorage にありません');
         return;
       }
 
       try {
-        showLoading('セッション確認中...');
-
         const result = await callAPI({
           action: 'validateSession',
-          token
-        });
-
-        if (!result.success) {
-          sessionStorage.clear();
-          location.href = buildLoginUrl();
-          return;
-        }
-
-        currentUser = { token, userId, userName, groupId, groupName };
-        sessionStorage.setItem('appUrl', API_URL);
-
-        document.getElementById('headerUser').textContent =
-          `${groupName || ''} / ${userName || ''} さん`;
-
-        setToday();
-        buildMonthSelect('monthSelect');
-        buildMonthSelect('reportMonth');
-        await loadCategories();
-        await showView('input');
-
-      } catch (err) {
-        console.error('init error:', err);
-        showAlert('初期化に失敗しました: ' + (err.message || err), 'error');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    // ===== 入力ビュー処理 =====
-
-    function handleImageSelect(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(ev) {
-        currentImageDataUrl = ev.target.result;
-
-        const img = document.getElementById('previewImg');
-        img.src = currentImageDataUrl;
-        img.classList.remove('hidden');
-        document.getElementById('previewPlaceholder').classList.add('hidden');
-
-        document.getElementById('ocrBtn').disabled = false;
-        document.getElementById('saveBtn').disabled = false;
-        document.getElementById('saveHint').classList.add('hidden');
-      };
-      reader.readAsDataURL(file);
-    }
-
-    function compressImage(dataUrl, maxPx = 1024, quality = 0.85) {
-      return new Promise(resolve => {
-        const img = new Image();
-
-        img.onload = function() {
-          let w = img.width;
-          let h = img.height;
-
-          if (w > maxPx || h > maxPx) {
-            if (w > h) {
-              h = Math.round(h * maxPx / w);
-              w = maxPx;
-            } else {
-              w = Math.round(w * maxPx / h);
-              h = maxPx;
-            }
-          }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-
-        img.src = dataUrl;
-      });
-    }
-
-    async function runOCR() {
-      if (!currentImageDataUrl || !currentUser?.token) return;
-
-      const btn = document.getElementById('ocrBtn');
-      const status = document.getElementById('ocrStatus');
-
-      btn.disabled = true;
-      status.textContent = '🔍 OCR処理中...';
-      status.classList.remove('hidden');
-
-      try {
-        showLoading('OCR処理中...');
-
-        const compressed = await compressImage(currentImageDataUrl);
-        const base64 = compressed.split(',')[1];
-
-        const result = await callAPI({
-          action: 'processOCR',
-          token: currentUser.token,
-          imageBase64: base64
-        }, 30000);
-
-        if (result.success && result.data) {
-          const d = result.data;
-
-          if (d.date)      document.getElementById('expenseDate').value = d.date;
-          if (d.amount)    document.getElementById('amount').value = d.amount;
-          if (d.payee)     document.getElementById('payee').value = d.payee;
-          if (d.invoiceNo) document.getElementById('invoiceNo').value = d.invoiceNo;
-          if (d.category)  document.getElementById('categorySelect').value = d.category;
-
-          status.textContent = '✅ OCR完了！内容を確認してください';
-          showAlert('OCR完了！内容を確認してください', 'success');
-        } else {
-          status.textContent = '⚠️ 読取できませんでした。手動で入力してください';
-          showAlert('OCR結果を取得できませんでした。手動で入力してください。', 'warning');
-        }
-      } catch (err) {
-        console.error('OCRエラー:', err);
-        status.textContent = '❌ OCRエラーが発生しました';
-        showAlert('OCR処理でエラーが発生しました: ' + (err.message || err), 'error');
-      } finally {
-        hideLoading();
-        btn.disabled = false;
-      }
-    }
-
-    function toggleAdvance() {
-      const cb = document.getElementById('isAdvancePayment');
-      const sel = document.getElementById('categorySelect');
-
-      if (cb.checked) {
-        sel.value = 'CAT011';
-        sel.disabled = true;
-      } else {
-        sel.disabled = false;
-      }
-    }
-
-    document.getElementById('invoiceNo').addEventListener('input', function() {
-      const val = this.value;
-      const errEl = document.getElementById('invoiceError');
-
-      if (val && !/^T\d{13}$/.test(val)) {
-        errEl.classList.remove('hidden');
-      } else {
-        errEl.classList.add('hidden');
-      }
-    });
-
-    async function saveRecord() {
-      hideAlert();
-
-      const date = document.getElementById('expenseDate').value;
-      const amount = document.getElementById('amount').value;
-      const payee = document.getElementById('payee').value;
-      const category = document.getElementById('categorySelect').value;
-
-      if (!date || !amount) {
-        showAlert('日付と金額は必須です', 'error');
-        return;
-      }
-
-      const btn = document.getElementById('saveBtn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="btn-icon">⏳</span> 保存中...';
-
-      try {
-        let imageFileId = '';
-        let imageUrl = '';
-
-        if (currentImageDataUrl) {
-          showLoading('画像をアップロード中...');
-          const compressed = await compressImage(currentImageDataUrl);
-          const base64 = compressed.split(',')[1];
-
-          const imgResult = await callAPI({
-            action: 'saveImage',
-            token: currentUser.token,
-            groupId: currentUser.groupId,
-            imageBase64: base64,
-            fileName: `receipt_${Date.now()}.jpg`
-          }, 30000);
-
-          if (imgResult.success) {
-            imageFileId = imgResult.fileId || '';
-            imageUrl = imgResult.fileUrl || '';
-          }
-        }
-
-        showLoading('登録中...');
-        const saveResult = await callAPI({
-          action: 'saveRecord',
-          token: currentUser.token,
-          groupId: currentUser.groupId,
-          userId: currentUser.userId,
-          date,
-          amount: parseInt(amount, 10),
-          payee,
-          invoiceNo: document.getElementById('invoiceNo').value,
-          categoryCode: category,
-          advancePayment: document.getElementById('isAdvancePayment').checked,
-          comment: document.getElementById('comment').value,
-          imageFileId,
-          imageUrl
-        }, 30000);
-
-        if (saveResult.success) {
-          showAlert('✅ 登録しました！', 'success');
-          resetForm();
-        } else {
-          showAlert('保存エラー: ' + (saveResult.error || '不明なエラー'), 'error');
-        }
-      } catch (err) {
-        console.error('保存エラー:', err);
-        showAlert('保存処理でエラーが発生しました: ' + (err.message || err), 'error');
-      } finally {
-        hideLoading();
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-icon">💾</span> 登録する';
-      }
-    }
-
-    function resetForm() {
-      currentImageDataUrl = null;
-
-      document.getElementById('previewImg').classList.add('hidden');
-      document.getElementById('previewImg').src = '';
-      document.getElementById('previewPlaceholder').classList.remove('hidden');
-      document.getElementById('cameraInput').value = '';
-      document.getElementById('galleryInput').value = '';
-
-      document.getElementById('ocrBtn').disabled = true;
-      document.getElementById('ocrStatus').classList.add('hidden');
-      document.getElementById('ocrStatus').textContent = '';
-
-      document.getElementById('amount').value = '';
-      document.getElementById('payee').value = '';
-      document.getElementById('invoiceNo').value = '';
-      document.getElementById('categorySelect').value = '';
-      document.getElementById('categorySelect').disabled = false;
-      document.getElementById('isAdvancePayment').checked = false;
-      document.getElementById('comment').value = '';
-
-      setToday();
-
-      document.getElementById('saveBtn').disabled = true;
-      document.getElementById('saveHint').classList.remove('hidden');
-    }
-
-    // ===== 履歴ビュー処理 =====
-
-    async function loadRecords() {
-      if (!currentUser?.token) return;
-
-      const yearMonth = document.getElementById('monthSelect').value;
-      showLoading('データ読み込み中...');
-
-      try {
-        const data = await callAPI({
-          action: 'getRecords',
-          token: currentUser.token,
-          yearMonth
-        }, 20000);
-
-        if (data.success) {
-          allRecords = Array.isArray(data.records) ? data.records : [];
-          renderRecords(allRecords);
-        } else {
-          allRecords = [];
-          renderRecords([]);
-          showAlert(data.error || 'データ取得に失敗しました', 'error');
-        }
-      } catch (e) {
-        console.error('loadRecords error:', e);
-        allRecords = [];
-        renderRecords([]);
-        showAlert('履歴取得エラー: ' + (e.message || e), 'error');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    function renderRecords(records) {
-      const list = document.getElementById('recordList');
-      const bar = document.getElementById('summaryBar');
-
-      if (!records.length) {
-        bar.classList.add('hidden');
-        list.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">📭</div>
-            <div class="empty-text">この月の経費データはありません</div>
-          </div>
-        `;
-        return;
-      }
-
-      const total = records.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      document.getElementById('totalAmount').textContent = '¥' + total.toLocaleString();
-      document.getElementById('recordCount').textContent = records.length + '件';
-      bar.classList.remove('hidden');
-
-      list.innerHTML = records.map((rec, idx) => `
-        <div class="record-card ${rec.isAdvancePayment ? 'advance' : ''}">
-          <div class="record-top">
-            <div class="record-payee">
-              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx + 1}</span>
-              ${esc(rec.payee || '（支払先不明）')}
-            </div>
-            <div class="record-amount">¥${Number(rec.amount || 0).toLocaleString()}</div>
-          </div>
-
-          <div class="record-meta">
-            <span>📅 ${esc(rec.date || '')}</span>
-            <span>👤 ${esc(rec.displayName || '')}</span>
-            <span class="badge badge-primary">${esc(rec.categoryName || '')}</span>
-            ${rec.isAdvancePayment ? '<span class="badge badge-warning">💰 立替金</span>' : ''}
-            ${rec.invoiceNo ? `<span class="badge" style="background:#f1f8e9;color:#388e3c;">🔢 ${esc(rec.invoiceNo)}</span>` : ''}
-          </div>
-
-          ${rec.comment ? `<div class="record-comment">💬 ${esc(rec.comment)}</div>` : ''}
-
-          <div class="record-actions">
-            ${rec.imageFileId ? `
-              <button
-                type="button"
-                class="btn btn-secondary btn-sm"
-                onclick="openImage('${esc(rec.imageFileId)}')"
-              >
-                🖼️ 画像
-              </button>
-            ` : ''}
-
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              onclick="showEditModal('${esc(rec.recordId)}')"
-            >
-              ✏️ 編集
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-sm"
-              style="background:#fce8e6;color:#c62828;"
-              onclick="deleteRecord('${esc(rec.recordId)}', '${esc(rec.payee || '')}')"
-            >
-              🗑️ 削除
-            </button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function openImage(fileId) {
-      window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
-    }
-
-    function showEditModal(recordId) {
-      const rec = allRecords.find(r => r.recordId === recordId);
-      if (!rec) return;
-
-      document.getElementById('editRecordId').value = rec.recordId;
-      document.getElementById('editDate').value = rec.date || '';
-      document.getElementById('editAmount').value = rec.amount || '';
-      document.getElementById('editPayee').value = rec.payee || '';
-      document.getElementById('editInvoiceNo').value = rec.invoiceNo || '';
-      document.getElementById('editComment').value = rec.comment || '';
-
-      const isAdv = !!rec.isAdvancePayment;
-      document.getElementById('editIsAdvance').checked = isAdv;
-
-      editPrevCat = rec.categoryId || 'CAT001';
-
-      buildCategorySelect('editCategory', isAdv ? 'CAT011' : editPrevCat);
-      document.getElementById('editCategory').disabled = isAdv;
-      document.getElementById('editAdvanceGroup').style.background =
-        isAdv ? '#fff3cd' : '#fff8e1';
-
-      document.getElementById('editModal').classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeEditModal(event) {
-      if (event && event.target !== document.getElementById('editModal')) return;
-      document.getElementById('editModal').classList.add('hidden');
-      document.body.style.overflow = '';
-    }
-
-    function toggleEditAdvance() {
-      const cb = document.getElementById('editIsAdvance');
-      const sel = document.getElementById('editCategory');
-
-      if (cb.checked) {
-        editPrevCat = sel.value || 'CAT001';
-        buildCategorySelect('editCategory', 'CAT011');
-        sel.disabled = true;
-        document.getElementById('editAdvanceGroup').style.background = '#fff3cd';
-      } else {
-        sel.disabled = false;
-        buildCategorySelect('editCategory', editPrevCat);
-        document.getElementById('editAdvanceGroup').style.background = '#fff8e1';
-      }
-    }
-
-    async function updateRecord() {
-      const recordId = document.getElementById('editRecordId').value;
-      const sel = document.getElementById('editCategory');
-      const invoiceNo = document.getElementById('editInvoiceNo').value;
-
-      if (invoiceNo && !/^T\d{13}$/.test(invoiceNo)) {
-        alert('インボイス番号の形式が正しくありません（T + 13桁の数字）');
-        return;
-      }
-
-      showLoading('更新中...');
-
-      try {
-        const data = await callAPI({
-          action: 'updateRecord',
-          token: currentUser.token,
-          recordId,
-          updates: {
-            date: document.getElementById('editDate').value,
-            amount: parseInt(document.getElementById('editAmount').value, 10) || 0,
-            payee: document.getElementById('editPayee').value,
-            invoiceNo: invoiceNo,
-            categoryId: sel.value,
-            categoryName: sel.options[sel.selectedIndex]?.textContent || '',
-            isAdvancePayment: document.getElementById('editIsAdvance').checked,
-            comment: document.getElementById('editComment').value
-          }
-        }, 20000);
-
-        if (data.success) {
-          closeEditModal();
-          showAlert('✅ 更新しました', 'success');
-          await loadRecords();
-        } else {
-          alert('更新に失敗しました: ' + (data.error || ''));
-        }
-      } catch (e) {
-        console.error('updateRecord error:', e);
-        alert('通信エラーが発生しました: ' + (e.message || e));
-      } finally {
-        hideLoading();
-      }
-    }
-
-    async function deleteRecord(recordId, payee) {
-      if (!confirm(`「${payee}」を削除しますか？\nこの操作は元に戻せません。`)) return;
-
-      showLoading('削除中...');
-
-      try {
-        const data = await callAPI({
-          action: 'deleteRecord',
-          token: currentUser.token,
-          recordId
-        }, 20000);
-
-        if (data.success) {
-          showAlert('🗑️ 削除しました', 'info');
-          await loadRecords();
-        } else {
-          showAlert('削除に失敗しました: ' + (data.error || ''), 'error');
-        }
-      } catch (e) {
-        console.error('deleteRecord error:', e);
-        showAlert('通信エラーが発生しました: ' + (e.message || e), 'error');
-      } finally {
-        hideLoading();
-      }
-    }
-
-    // ===== レポート =====
-
-    function showReportModal() {
-      const curMonth = document.getElementById('monthSelect').value;
-      document.getElementById('reportMonth').value = curMonth;
-
-      const preview = document.getElementById('reportPreview');
-      if (allRecords.length > 0) {
-        const total = allRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-        preview.textContent =
-          `${document.getElementById('monthSelect').options[document.getElementById('monthSelect').selectedIndex].textContent}：${allRecords.length}件 / 合計 ¥${total.toLocaleString()}`;
-        preview.classList.remove('hidden');
-      } else {
-        preview.classList.add('hidden');
-      }
-
-      document.getElementById('reportResult').classList.add('hidden');
-      document.getElementById('reportLinks').innerHTML = '';
-      document.getElementById('generateBtn').disabled = false;
-
-      document.getElementById('reportModal').classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeReportModal(event) {
-      if (event && event.target !== document.getElementById('reportModal')) return;
-      document.getElementById('reportModal').classList.add('hidden');
-      document.body.style.overflow = '';
-    }
-
-    async function generateReport() {
-      const yearMonth = document.getElementById('reportMonth').value;
-      const reportType = document.getElementById('reportType').value;
-
-      document.getElementById('generateBtn').disabled = true;
-      showLoading('レポート生成中...\n（50件で約1分かかります）');
-
-      try {
-        const data = await callAPI({
-          action: 'generateReport',
-          token: currentUser.token,
-          yearMonth,
-          reportType
-        }, 60000);
-
-        if (data.success) {
-          const links = document.getElementById('reportLinks');
-          links.innerHTML = '';
-
-          if (data.listUrl) {
-            links.innerHTML += `
-              <a
-                href="${data.listUrl}"
-                target="_blank"
-                class="btn btn-outline"
-                style="justify-content:flex-start;"
-              >
-                📊 経費一覧スプレッドシートを開く
-              </a>
-            `;
-          }
-
-          if (data.pdfUrl) {
-            links.innerHTML += `
-              <a
-                href="${data.pdfUrl}"
-                target="_blank"
-                class="btn btn-outline"
-                style="justify-content:flex-start;"
-              >
-                📄 領収書画像PDFを開く
-              </a>
-            `;
-          }
-
-          document.getElementById('reportResult').classList.remove('hidden');
-        } else {
-          alert('レポート生成に失敗しました: ' + (data.error || ''));
-          document.getElementById('generateBtn').disabled = false;
-        }
-      } catch (e) {
-        console.error('generateReport error:', e);
-        alert('通信エラーが発生しました: ' + (e.message || e));
-        document.getElementById('generateBtn').disabled = false;
-      } finally {
-        hideLoading();
-      }
-    }
-
-    // ===== ログアウト =====
-
-    async function doLogout() {
-      try {
-        await callAPI({
-          action: 'logout',
-          token: currentUser?.token || sessionStorage.getItem('token')
+          token: token
         }, 10000);
-      } catch (e) {
-        console.warn('logout API failed:', e);
-      }
 
-      sessionStorage.clear();
-      location.href = buildLoginUrl();
+        log('validateSession 成功');
+        if (result && result.success) {
+          log('セッション有効');
+        } else {
+          log('セッション無効 or success=false');
+        }
+      } catch (err) {
+        log('起動確認エラー: ' + (err.message || err));
+        setLastResult('起動確認エラー: ' + (err.message || err));
+      }
     }
 
-    // ===== 起動 =====
-    window.addEventListener('load', init);
+    async function testValidateSession() {
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        log('validateSession 中止: tokenなし');
+        setLastResult('token がありません');
+        return;
+      }
+
+      try {
+        const result = await callAPI({
+          action: 'validateSession',
+          token: token
+        }, 10000);
+        log('validateSession 完了');
+        setLastResult(result);
+      } catch (err) {
+        log('validateSession エラー: ' + (err.message || err));
+        setLastResult('validateSession エラー: ' + (err.message || err));
+      }
+    }
+
+    async function testGetCategories() {
+      try {
+        const result = await callAPI({
+          action: 'getCategories'
+        }, 10000);
+        log('getCategories 完了');
+        setLastResult(result);
+      } catch (err) {
+        log('getCategories エラー: ' + (err.message || err));
+        setLastResult('getCategories エラー: ' + (err.message || err));
+      }
+    }
+
+    async function testGetRecords() {
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        log('getRecords 中止: tokenなし');
+        setLastResult('token がありません');
+        return;
+      }
+
+      try {
+        const ym = currentYearMonth();
+        const result = await callAPI({
+          action: 'getRecords',
+          token: token,
+          yearMonth: ym
+        }, 15000);
+        log('getRecords 完了 yearMonth=' + ym);
+        setLastResult(result);
+      } catch (err) {
+        log('getRecords エラー: ' + (err.message || err));
+        setLastResult('getRecords エラー: ' + (err.message || err));
+      }
+    }
+
+    async function testLogout() {
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        log('logout 中止: tokenなし');
+        setLastResult('token がありません');
+        return;
+      }
+
+      try {
+        const result = await callAPI({
+          action: 'logout',
+          token: token
+        }, 10000);
+        log('logout 完了');
+        setLastResult(result);
+      } catch (err) {
+        log('logout エラー: ' + (err.message || err));
+        setLastResult('logout エラー: ' + (err.message || err));
+      }
+    }
+
+    async function runAllTests() {
+      log('===== 全テスト開始 =====');
+      await testValidateSession();
+      await testGetCategories();
+      await testGetRecords();
+      log('===== 全テスト終了 =====');
+    }
+
+    function clearLog() {
+      document.getElementById('logArea').textContent = '';
+      document.getElementById('lastResult').textContent = 'ログを消去しました';
+      log('ログを初期化しました');
+    }
+
+    function goLogin() {
+      log('ログイン画面へ移動: ' + APP_URL);
+      location.href = APP_URL;
+    }
+
+    // JS起動確認
+    document.addEventListener('DOMContentLoaded', function() {
+      setJsStatus(true, 'JS実行中');
+      fillBasicInfo();
+      log('DOMContentLoaded 発火');
+      log('DIAG INDEX VER-DIAG-1 読み込み成功');
+      runBootCheck();
+    });
   </script>
 </body>
 </html>
