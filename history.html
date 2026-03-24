@@ -159,7 +159,7 @@
 
   <script>
     // ============================================================
-    // history.html - クライアントサイドJS
+    // history.html - クライアントサイドJS（修正版）
     // ============================================================
 
     const APP_URL      = sessionStorage.getItem('appUrl') || '<?= ScriptApp.getService().getUrl(); ?>';
@@ -168,19 +168,27 @@
     const DISPLAY_NAME = sessionStorage.getItem('displayName');
     const ROLE         = sessionStorage.getItem('role');
 
-    let allRecords   = [];
-    let categories   = [];
-    let editPrevCat  = 'CAT001';
+    let allRecords  = [];
+    let categories  = [];
+    let editPrevCat = 'CAT001';
 
     /** GAS API 呼び出し */
     async function callAPI(params) {
       const res = await fetch(APP_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },  // ← 変更
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(params),
         redirect: 'follow'
       });
-      return await res.json();
+
+      const text = await res.text();
+
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error('APIレスポンス解析失敗:', text);
+        throw new Error('APIレスポンスの解析に失敗しました');
+      }
     }
 
     function showAlert(msg, type = 'info') {
@@ -188,8 +196,11 @@
       el.className = `alert alert-${type}`;
       el.textContent = msg;
       el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 5000);
+      if (type === 'success' || type === 'info') {
+        setTimeout(() => el.classList.add('hidden'), 4000);
+      }
     }
+
     function setLoading(show, text = '処理中...') {
       document.getElementById('loadingText').textContent = text;
       document.getElementById('loading').classList.toggle('hidden', !show);
@@ -197,20 +208,45 @@
 
     // ===== 初期化 =====
     (async function init() {
-      if (!TOKEN) { location.href = APP_URL + '?page=login'; return; }
+      try {
+        setLoading(true, '初期化中...');
 
-      document.getElementById('headerUser').textContent =
-        `${GROUP_NAME} / ${DISPLAY_NAME}`;
+        if (!TOKEN) {
+          location.href = APP_URL + '?page=login';
+          return;
+        }
 
-      // 月選択プルダウン（直近12ヶ月）
-      buildMonthSelect('monthSelect');
-      buildMonthSelect('reportMonth');
+        // セッション検証
+        const sessionResult = await callAPI({
+          action: 'validateSession',
+          token: TOKEN
+        });
 
-      // 費目マスター取得
-      await loadCategories();
+        if (!sessionResult.success) {
+          sessionStorage.clear();
+          location.href = APP_URL + '?page=login';
+          return;
+        }
 
-      // 初期レコード表示
-      await loadRecords();
+        document.getElementById('headerUser').textContent =
+          `${GROUP_NAME || ''} / ${DISPLAY_NAME || ''}`;
+
+        // 月選択プルダウン（直近12ヶ月）
+        buildMonthSelect('monthSelect');
+        buildMonthSelect('reportMonth');
+
+        // 費目マスター取得
+        await loadCategories();
+
+        // 初期レコード表示
+        await loadRecords();
+
+      } catch (e) {
+        console.error('history init error:', e);
+        showAlert('履歴画面の初期化に失敗しました: ' + (e.message || e), 'error');
+      } finally {
+        setLoading(false);
+      }
     })();
 
     /** 月選択プルダウン生成（直近12ヶ月） */
@@ -218,10 +254,16 @@
       const sel = document.getElementById(elemId);
       sel.innerHTML = '';
       const now = new Date();
+
       for (let i = 0; i < 12; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const val = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
-        const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+
+        // バックエンドの getRecords 側が yyyyMM を期待している前提に合わせる
+        const val = `${y}${m}`;
+        const label = `${y}年${Number(m)}月`;
+
         const opt = document.createElement('option');
         opt.value = val;
         opt.textContent = label;
@@ -232,15 +274,31 @@
     /** 費目マスター読み込み */
     async function loadCategories() {
       try {
-        const data = await callAPI({ action: 'getCategories' });
-        if (data.success) categories = data.categories;
-      } catch (e) {}
+        const data = await callAPI({
+          action: 'getCategories'
+        });
+
+        if (data.success && Array.isArray(data.categories)) {
+          // Category.js の返り値(code/name)と history 側(categoryId/categoryName)のズレを吸収
+          categories = data.categories.map(c => ({
+            categoryId: c.categoryId || c.code || '',
+            categoryName: c.categoryName || c.name || ''
+          }));
+        } else {
+          categories = [];
+        }
+      } catch (e) {
+        console.error('loadCategories error:', e);
+        categories = [];
+        showAlert('費目マスターの取得に失敗しました', 'error');
+      }
     }
 
     /** 費目セレクト構築 */
     function buildCategorySelect(elemId, selectedId) {
       const sel = document.getElementById(elemId);
       sel.innerHTML = '';
+
       categories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.categoryId;
@@ -256,14 +314,24 @@
       setLoading(true, 'データ読み込み中...');
 
       try {
-        const data = await callAPI({ action: 'getRecords', yearMonth });
+        const data = await callAPI({
+          action: 'getRecords',
+          token: TOKEN,
+          yearMonth
+        });
+
         if (data.success) {
-          allRecords = data.records;
+          allRecords = Array.isArray(data.records) ? data.records : [];
           renderRecords(allRecords);
         } else {
+          allRecords = [];
+          renderRecords([]);
           showAlert(data.error || 'データ取得に失敗しました', 'error');
         }
       } catch (e) {
+        console.error('loadRecords error:', e);
+        allRecords = [];
+        renderRecords([]);
         showAlert('通信エラーが発生しました', 'error');
       } finally {
         setLoading(false);
@@ -275,7 +343,7 @@
       const list = document.getElementById('recordList');
       const bar  = document.getElementById('summaryBar');
 
-      if (records.length === 0) {
+      if (!records || records.length === 0) {
         bar.classList.add('hidden');
         list.innerHTML = `
           <div class="empty-state">
@@ -285,24 +353,22 @@
         return;
       }
 
-      // 合計計算
       const total = records.reduce((s, r) => s + (Number(r.amount) || 0), 0);
       document.getElementById('totalAmount').textContent = '¥' + total.toLocaleString();
       document.getElementById('recordCount').textContent = records.length + '件';
       bar.classList.remove('hidden');
 
-      // カード生成
       list.innerHTML = records.map((rec, idx) => `
         <div class="record-card ${rec.isAdvancePayment ? 'advance' : ''}">
           <div class="record-top">
             <div class="record-payee">
-              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx+1}</span>
+              <span style="font-size:12px;color:#9e9e9e;margin-right:4px;">No.${idx + 1}</span>
               ${esc(rec.payee || '（支払先不明）')}
             </div>
-            <div class="record-amount">¥${Number(rec.amount||0).toLocaleString()}</div>
+            <div class="record-amount">¥${Number(rec.amount || 0).toLocaleString()}</div>
           </div>
           <div class="record-meta">
-            <span>📅 ${rec.date || ''}</span>
+            <span>📅 ${esc(rec.date || '')}</span>
             <span>👤 ${esc(rec.displayName || '')}</span>
             <span class="badge badge-primary">${esc(rec.categoryName || '')}</span>
             ${rec.isAdvancePayment ? '<span class="badge badge-warning">💰 立替金</span>' : ''}
@@ -312,7 +378,7 @@
           <div class="record-actions">
             ${rec.imageFileId ? `
               <button class="btn btn-secondary btn-sm"
-                      onclick="openImage('${rec.imageFileId}')">
+                      onclick="openImage('${esc(rec.imageFileId)}')">
                 🖼️ 画像
               </button>` : ''}
             <button class="btn btn-outline btn-sm"
@@ -331,8 +397,11 @@
     /** HTML エスケープ */
     function esc(str) {
       return String(str)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // ===== 画像を開く =====
@@ -375,6 +444,7 @@
     function toggleEditAdvance() {
       const cb  = document.getElementById('editIsAdvance');
       const sel = document.getElementById('editCategory');
+
       if (cb.checked) {
         editPrevCat = sel.value || 'CAT001';
         buildCategorySelect('editCategory', 'CAT011');
@@ -389,8 +459,8 @@
 
     /** レコード更新 */
     async function updateRecord() {
-      const recordId = document.getElementById('editRecordId').value;
-      const sel      = document.getElementById('editCategory');
+      const recordId  = document.getElementById('editRecordId').value;
+      const sel       = document.getElementById('editCategory');
       const invoiceNo = document.getElementById('editInvoiceNo').value;
 
       if (invoiceNo && !/^T\d{13}$/.test(invoiceNo)) {
@@ -399,13 +469,15 @@
       }
 
       setLoading(true, '更新中...');
+
       try {
         const data = await callAPI({
           action: 'updateRecord',
+          token: TOKEN,
           recordId,
           updates: {
             date:             document.getElementById('editDate').value,
-            amount:           parseInt(document.getElementById('editAmount').value) || 0,
+            amount:           parseInt(document.getElementById('editAmount').value, 10) || 0,
             payee:            document.getElementById('editPayee').value,
             invoiceNo:        invoiceNo,
             categoryId:       sel.value,
@@ -424,6 +496,7 @@
           alert('更新に失敗しました: ' + (data.error || ''));
         }
       } catch (e) {
+        console.error('updateRecord error:', e);
         alert('通信エラーが発生しました');
       } finally {
         setLoading(false);
@@ -435,8 +508,14 @@
       if (!confirm(`「${payee}」を削除しますか？\nこの操作は元に戻せません。`)) return;
 
       setLoading(true, '削除中...');
+
       try {
-        const data = await callAPI({ action: 'deleteRecord', recordId });
+        const data = await callAPI({
+          action: 'deleteRecord',
+          token: TOKEN,
+          recordId
+        });
+
         if (data.success) {
           showAlert('🗑️ 削除しました', 'info');
           await loadRecords();
@@ -444,6 +523,7 @@
           showAlert('削除に失敗しました: ' + (data.error || ''), 'error');
         }
       } catch (e) {
+        console.error('deleteRecord error:', e);
         showAlert('通信エラーが発生しました', 'error');
       } finally {
         setLoading(false);
@@ -452,22 +532,23 @@
 
     // ===== レポートモーダル =====
     function showReportModal() {
-      // 現在の月を選択
       const curMonth = document.getElementById('monthSelect').value;
       document.getElementById('reportMonth').value = curMonth;
 
-      // プレビュー（件数・合計）
       const preview = document.getElementById('reportPreview');
       if (allRecords.length > 0) {
         const total = allRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const monthLabel = document.getElementById('monthSelect').options[
+          document.getElementById('monthSelect').selectedIndex
+        ]?.textContent || '';
+
         preview.textContent =
-          `${document.getElementById('monthSelect').options[document.getElementById('monthSelect').selectedIndex].textContent}：${allRecords.length}件 / 合計 ¥${total.toLocaleString()}`;
+          `${monthLabel}：${allRecords.length}件 / 合計 ¥${total.toLocaleString()}`;
         preview.classList.remove('hidden');
       } else {
         preview.classList.add('hidden');
       }
 
-      // 結果エリアリセット
       document.getElementById('reportResult').classList.add('hidden');
       document.getElementById('reportLinks').innerHTML = '';
       document.getElementById('generateBtn').disabled = false;
@@ -484,8 +565,8 @@
 
     /** レポート生成 */
     async function generateReport() {
-      const yearMonth   = document.getElementById('reportMonth').value;
-      const reportType  = document.getElementById('reportType').value;
+      const yearMonth  = document.getElementById('reportMonth').value;
+      const reportType = document.getElementById('reportType').value;
 
       document.getElementById('generateBtn').disabled = true;
       setLoading(true, 'レポート生成中...\n（50件で約1分かかります）');
@@ -493,6 +574,7 @@
       try {
         const data = await callAPI({
           action: 'generateReport',
+          token: TOKEN,
           yearMonth,
           reportType
         });
@@ -510,6 +592,7 @@
                 📊 経費一覧スプレッドシートを開く
               </a>`;
           }
+
           if (data.pdfUrl) {
             links.innerHTML += `
               <a href="${data.pdfUrl}" target="_blank"
@@ -524,6 +607,7 @@
           document.getElementById('generateBtn').disabled = false;
         }
       } catch (e) {
+        console.error('generateReport error:', e);
         setLoading(false);
         alert('通信エラーが発生しました');
         document.getElementById('generateBtn').disabled = false;
@@ -534,9 +618,19 @@
     function goInput() {
       location.href = APP_URL + '?page=index';
     }
+
     async function doLogout() {
       if (!confirm('ログアウトしますか？')) return;
-      try { await callAPI({ action: 'logout' }); } catch (e) {}
+
+      try {
+        await callAPI({
+          action: 'logout',
+          token: TOKEN
+        });
+      } catch (e) {
+        console.warn('logout API failed:', e);
+      }
+
       sessionStorage.clear();
       location.href = APP_URL + '?page=login';
     }
