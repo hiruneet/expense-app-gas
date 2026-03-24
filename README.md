@@ -23,3 +23,12 @@
 - history.html
 - stylesheet.html
 - appsscript.json
+
+## 初期セットアップメモ
+- Node.js をインストール
+- `npm install @google/clasp -g`
+- `clasp login`
+- Apps Script エディタで Script ID を取得
+- `clasp clone ScriptID`
+- GitHub Desktop で private repository を作成
+- Google Apps Script API を有効化してから `clasp push` を実行
