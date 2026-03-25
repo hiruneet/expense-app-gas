@@ -1,7 +1,5 @@
-// ローカル開発環境確認用コメント 2026-03-24
-
 // ============================================================
-// Code.gs - メインルーター
+// Code.gs - メインルーター ver2
 // ============================================================
 
 const SPREADSHEET_ID_KEY = 'SPREADSHEET_ID';
@@ -10,7 +8,11 @@ const SPREADSHEET_ID_KEY = 'SPREADSHEET_ID';
  * WebApp エントリーポイント (GET)
  */
 function doGet(e) {
-  const page = e.parameter.page || 'login';
+  let page = e.parameter.page || 'login';
+
+  // SPA統合: history は index に統合されたためリダイレクト
+  if (page === 'history') page = 'index';
+
   const template = HtmlService.createTemplateFromFile(page);
   const output = template.evaluate()
     .setTitle('経費精算アプリ')
@@ -38,7 +40,7 @@ function doPost(e) {
       case 'getRecords':     return jsonOut(getRecords(params));
       case 'updateRecord':   return jsonOut(updateRecord(params));
       case 'deleteRecord':   return jsonOut(deleteRecord(params));
-      case 'saveImage':      return jsonOut(saveReceiptImage(params)); 
+      case 'saveImage':      return jsonOut(saveReceiptImage(params));
       case 'getCategories':  return jsonOut(getCategories());
       case 'generateReport': return jsonOut(generateReport(params));
       default:
@@ -92,19 +94,16 @@ function getSettings(key) {
  * 初期セットアップ（初回のみ手動実行）
  */
 function initialSetup() {
-  // 1. スクリプトプロパティに SPREADSHEET_ID を設定
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
   props.setProperty(SPREADSHEET_ID_KEY, ss.getId());
   console.log('✅ SPREADSHEET_ID 設定: ' + ss.getId());
 
-  // 2. Drive にルートフォルダ作成
   const rootFolder = DriveApp.createFolder('expense_app_root');
   const receiptFolder = rootFolder.createFolder('receipts');
   const exportsFolder = rootFolder.createFolder('exports');
   console.log('✅ Drive フォルダ作成 | root: ' + rootFolder.getId());
 
-  // 3. settings シートに root_folder_id を保存
   const settingsSheet = ss.getSheetByName('settings');
   const data = settingsSheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
@@ -121,7 +120,7 @@ function initialSetup() {
  * パスワードハッシュ生成ユーティリティ（ユーザー登録時に使用）
  */
 function generatePasswordHash(password) {
-  const rawHash = password || 'your_password_here'; // 作成するパスワードを入力する
+  const rawHash = password || 'your_password_here';
   const bytes = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
     rawHash,

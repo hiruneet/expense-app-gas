@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base target="_top">
   <title>経費精算 - ログイン</title>
   <?!= include('stylesheet'); ?>
   <style>
@@ -94,12 +95,12 @@
         </button>
       </form>
     </div>
-    <div class="version-badge">経費精算アプリ v1.0</div>
+    <div class="version-badge">経費精算アプリ v2.0</div>
   </div>
 
   <script>
-   // ============================================================
-// login.html - クライアントサイドJS（修正版）
+// ============================================================
+// login.html - クライアントサイドJS
 // ============================================================
 
 const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
@@ -169,7 +170,7 @@ document.getElementById('groupSelect').addEventListener('change', async function
         const opt = document.createElement('option');
         opt.value = u.userId;
         opt.textContent = u.displayName;
-        userSel.appendChild(opt);  // ← 修正：sel → userSel
+        userSel.appendChild(opt);
       });
       userSel.disabled = false;
     } else {
@@ -201,7 +202,6 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   try {
     const data = await callAPI({ action: 'login', groupId, userId, password });
     if (data.success) {
-      // セッション情報を sessionStorage に保存
       sessionStorage.setItem('token',       data.token);
       sessionStorage.setItem('groupId',     data.groupId);
       sessionStorage.setItem('groupName',   data.groupName);
@@ -209,8 +209,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       sessionStorage.setItem('displayName', data.displayName);
       sessionStorage.setItem('role',        data.role);
       sessionStorage.setItem('appUrl',      APP_URL);
-      // 入力画面へ遷移
-      location.href = APP_URL + '?page=index';
+      // ★ 変更点: _top でトップフレームを遷移（IFRAME sandbox 対策）
+      window.open(APP_URL + '?page=index', '_top');
     } else {
       showError(data.error || 'ログインに失敗しました');
     }
@@ -239,7 +239,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     });
     const data = await res.json();
     if (data.success) {
-      location.href = APP_URL + '?page=index';
+      // ★ 変更点: _top でトップフレームを遷移（IFRAME sandbox 対策）
+      window.open(APP_URL + '?page=index', '_top');
       return;
     }
   } catch (e) {}
