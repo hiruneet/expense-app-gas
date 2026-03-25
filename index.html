@@ -263,11 +263,11 @@
 // ===== 定数・状態 =====
 const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
 
-let currentUser      = null;   // { token, userId, userName, groupId, groupName }
+let currentUser         = null;   // { token, userId, userName, groupId, groupName }
 let currentImageDataUrl = null;
-let allRecords       = [];     // 履歴ビュー用
-let categories       = [];     // 費目マスター
-let editPrevCat      = '';     // 編集モーダル：前回カテゴリ
+let allRecords          = [];     // 履歴ビュー用
+let categories          = [];     // 費目マスター
+let editPrevCat         = '';     // 編集モーダル：前回カテゴリ
 
 // ===== API共通（text/plain でCORS回避） =====
 async function callAPI(params) {
@@ -347,6 +347,8 @@ async function init() {
   const groupName = sessionStorage.getItem('groupName');
 
   if (!token) {
+    // ★ ローディング表示改善: ログイン画面への遷移中も表示
+    showLoading('ログイン画面へ移動中...');
     window.open(APP_URL, '_top');
     return;
   }
@@ -357,6 +359,7 @@ async function init() {
     const result = await callAPI({ action: 'validateSession', token });
     if (!result.success) {
       sessionStorage.clear();
+      showLoading('セッション切れ — ログイン画面へ移動中...');
       window.open(APP_URL, '_top');
       return;
     }
@@ -434,7 +437,7 @@ function buildMonthSelect(elemId) {
   const now = new Date();
   for (let i = 0; i < 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    // ★ YYYY-MM形式（Sheets.js の startsWith フィルタに合わせる）
+    // ★ YYYY-MM形式（Sheets.js の normalizeYearMonth に合わせる）
     const val   = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     const label = d.getFullYear() + '年' + (d.getMonth() + 1) + '月';
     const opt = document.createElement('option');
@@ -674,7 +677,6 @@ async function loadRecords() {
   showLoading('データ読み込み中...');
 
   try {
-    // ★ Hub版のバグ修正: token を含める
     var data = await callAPI({
       action: 'getRecords',
       token: currentUser.token,
@@ -846,7 +848,6 @@ async function deleteRecord(recordId, payee) {
 
   showLoading('削除中...');
   try {
-    // ★ Hub版のバグ修正: token を含める
     var data = await callAPI({
       action: 'deleteRecord',
       token: currentUser.token,
@@ -881,7 +882,7 @@ function showReportModal() {
       allRecords.length + '件 / 合計 ¥' + total.toLocaleString();
     preview.classList.remove('hidden');
   } else {
-    preview.classList.add('hidden');
+    preview.classList.remove('hidden');
   }
 
   document.getElementById('reportResult').classList.add('hidden');
@@ -948,11 +949,20 @@ async function generateReport() {
 // ============================================================
 async function doLogout() {
   if (!confirm('ログアウトしますか？')) return;
+
+  // ★ ローディング表示改善: ログアウト処理中も表示
+  showLoading('ログアウト中...');
+
   try {
     await callAPI({ action: 'logout', token: currentUser ? currentUser.token : '' });
-  } catch (e) { /* 無視 */ }
+  } catch (e) {
+    // ログアウトAPI失敗でも遷移は続行
+  }
+
   sessionStorage.clear();
-  // ★ _top でトップフレームを遷移（IFRAME sandbox 対策）
+
+  // ★ ローディング表示改善: 遷移中も表示を維持（消さない）
+  showLoading('ログイン画面へ戻っています...');
   window.open(APP_URL, '_top');
 }
 

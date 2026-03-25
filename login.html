@@ -52,7 +52,7 @@
   <!-- ローディング -->
   <div id="loading" class="loading-overlay hidden">
     <div class="spinner"></div>
-    <div class="loading-text">認証中...</div>
+    <div id="loadingText" class="loading-text">認証中...</div>
   </div>
 
   <div class="login-wrapper">
@@ -105,6 +105,9 @@
 
 const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
 
+// ★ 画面遷移中フラグ（遷移時はローディングを消さない）
+let navigating = false;
+
 /** GAS API 呼び出し共通関数 */
 async function callAPI(params) {
   const res = await fetch(APP_URL, {
@@ -114,6 +117,15 @@ async function callAPI(params) {
     redirect: 'follow'
   });
   return await res.json();
+}
+
+// ===== ローディング制御 =====
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text || '処理中...';
+  document.getElementById('loading').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loading').classList.add('hidden');
 }
 
 function showError(msg) {
@@ -196,7 +208,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     return;
   }
 
-  document.getElementById('loading').classList.remove('hidden');
+  // ★ ローディング表示改善: 文言付きで表示
+  showLoading('ログイン中...');
   document.getElementById('loginBtn').disabled = true;
 
   try {
@@ -209,16 +222,23 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       sessionStorage.setItem('displayName', data.displayName);
       sessionStorage.setItem('role',        data.role);
       sessionStorage.setItem('appUrl',      APP_URL);
-      // ★ 変更点: _top でトップフレームを遷移（IFRAME sandbox 対策）
+
+      // ★ ローディング表示改善: 遷移中も表示を維持
+      navigating = true;
+      showLoading('入力画面を開いています...');
       window.open(APP_URL + '?page=index', '_top');
+      return; // finally でローディングを消さないよう return
     } else {
       showError(data.error || 'ログインに失敗しました');
     }
   } catch (e) {
     showError('通信エラーが発生しました。再度お試しください。');
   } finally {
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('loginBtn').disabled = false;
+    // ★ 遷移中でなければローディングを消してボタンを戻す
+    if (!navigating) {
+      hideLoading();
+      document.getElementById('loginBtn').disabled = false;
+    }
   }
 });
 
@@ -229,6 +249,10 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     initGroups();
     return;
   }
+
+  // ★ ローディング表示改善: セッション確認中も表示
+  showLoading('セッション確認中...');
+
   try {
     const appUrl = sessionStorage.getItem('appUrl') || APP_URL;
     const res = await fetch(appUrl, {
@@ -239,11 +263,16 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     });
     const data = await res.json();
     if (data.success) {
-      // ★ 変更点: _top でトップフレームを遷移（IFRAME sandbox 対策）
+      // ★ ローディング表示改善: 遷移中も表示を維持
+      navigating = true;
+      showLoading('入力画面を開いています...');
       window.open(APP_URL + '?page=index', '_top');
       return;
     }
   } catch (e) {}
+
+  // セッション無効 → ログインフォームを表示
+  hideLoading();
   sessionStorage.clear();
   initGroups();
 })();
