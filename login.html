@@ -108,6 +108,38 @@ const APP_URL = '<?= ScriptApp.getService().getUrl(); ?>';
 // ★ 画面遷移中フラグ（遷移時はローディングを消さない）
 let navigating = false;
 
+/**
+ * ★ iOS Safari 対応: トップフレーム遷移
+ * Safari は async/await 内の window.open() をポップアップとしてブロックする。
+ * 代わりに <a target="_top"> を動的生成して .click() することで回避。
+ * それでも遷移しない場合は 2秒後にタップ可能なリンクを画面に表示する。
+ */
+function navigateTop(url) {
+  navigating = true;
+  // 方法1: <a> タグの自動クリック（Safari で最も確実）
+  var a = document.createElement('a');
+  a.href = url;
+  a.target = '_top';
+  a.style.position = 'fixed';
+  a.style.top = '-9999px';
+  document.body.appendChild(a);
+  a.click();
+
+  // 方法2: フォールバック（2秒経っても遷移しなかった場合、リンクを表示）
+  setTimeout(function() {
+    if (document.body.contains(a)) document.body.removeChild(a);
+    var fb = document.getElementById('navFallback');
+    if (!fb) {
+      fb = document.createElement('div');
+      fb.id = 'navFallback';
+      fb.style.cssText = 'position:fixed;bottom:0;left:0;right:0;padding:20px;background:#fff;box-shadow:0 -2px 12px rgba(0,0,0,0.15);text-align:center;z-index:10000;';
+      fb.innerHTML = '<p style="margin:0 0 12px;font-size:14px;color:#333;">自動遷移できませんでした</p>' +
+        '<a href="' + url + '" target="_top" style="display:inline-block;padding:12px 32px;background:#1a73e8;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;">タップして進む →</a>';
+      document.body.appendChild(fb);
+    }
+  }, 2000);
+}
+
 /** GAS API 呼び出し共通関数 */
 async function callAPI(params) {
   const res = await fetch(APP_URL, {
@@ -224,9 +256,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       sessionStorage.setItem('appUrl',      APP_URL);
 
       // ★ ローディング表示改善: 遷移中も表示を維持
-      navigating = true;
       showLoading('入力画面を開いています...');
-      window.open(APP_URL + '?page=index', '_top');
+      navigateTop(APP_URL + '?page=index');
       return; // finally でローディングを消さないよう return
     } else {
       showError(data.error || 'ログインに失敗しました');
@@ -264,9 +295,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     const data = await res.json();
     if (data.success) {
       // ★ ローディング表示改善: 遷移中も表示を維持
-      navigating = true;
       showLoading('入力画面を開いています...');
-      window.open(APP_URL + '?page=index', '_top');
+      navigateTop(APP_URL + '?page=index');
       return;
     }
   } catch (e) {}

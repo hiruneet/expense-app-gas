@@ -269,6 +269,35 @@ let allRecords          = [];     // 履歴ビュー用
 let categories          = [];     // 費目マスター
 let editPrevCat         = '';     // 編集モーダル：前回カテゴリ
 
+/**
+ * ★ iOS Safari 対応: トップフレーム遷移
+ * Safari は async/await 内の window.open() をポップアップとしてブロックする。
+ * 代わりに <a target="_top"> を動的生成して .click() することで回避。
+ */
+function navigateTop(url) {
+  var a = document.createElement('a');
+  a.href = url;
+  a.target = '_top';
+  a.style.position = 'fixed';
+  a.style.top = '-9999px';
+  document.body.appendChild(a);
+  a.click();
+
+  // フォールバック: 2秒経っても遷移しない場合、リンクを表示
+  setTimeout(function() {
+    if (document.body.contains(a)) document.body.removeChild(a);
+    var fb = document.getElementById('navFallback');
+    if (!fb) {
+      fb = document.createElement('div');
+      fb.id = 'navFallback';
+      fb.style.cssText = 'position:fixed;bottom:0;left:0;right:0;padding:20px;background:#fff;box-shadow:0 -2px 12px rgba(0,0,0,0.15);text-align:center;z-index:10000;';
+      fb.innerHTML = '<p style="margin:0 0 12px;font-size:14px;color:#333;">自動遷移できませんでした</p>' +
+        '<a href="' + url + '" target="_top" style="display:inline-block;padding:12px 32px;background:#1a73e8;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;">タップして進む →</a>';
+      document.body.appendChild(fb);
+    }
+  }, 2000);
+}
+
 // ===== API共通（text/plain でCORS回避） =====
 async function callAPI(params) {
   try {
@@ -349,7 +378,7 @@ async function init() {
   if (!token) {
     // ★ ローディング表示改善: ログイン画面への遷移中も表示
     showLoading('ログイン画面へ移動中...');
-    window.open(APP_URL, '_top');
+    navigateTop(APP_URL);
     return;
   }
 
@@ -360,7 +389,7 @@ async function init() {
     if (!result.success) {
       sessionStorage.clear();
       showLoading('セッション切れ — ログイン画面へ移動中...');
-      window.open(APP_URL, '_top');
+      navigateTop(APP_URL);
       return;
     }
   } catch (err) {
@@ -963,7 +992,7 @@ async function doLogout() {
 
   // ★ ローディング表示改善: 遷移中も表示を維持（消さない）
   showLoading('ログイン画面へ戻っています...');
-  window.open(APP_URL, '_top');
+  navigateTop(APP_URL);
 }
 
 // ============================================================
